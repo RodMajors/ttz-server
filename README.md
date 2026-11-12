@@ -23,6 +23,8 @@ TTZ 公会站后端仓库。NestJS API、BullMQ worker、Prisma schema 和后端
 
 API 默认监听 http://localhost:3001/api。非生产环境 Swagger 位于 /api/docs。生产环境不公开 Swagger。
 
+Web 使用 HttpOnly、SameSite=Strict 的不透明会话 Cookie；小程序使用短期 access token 与可轮换 refresh token。数据库只保存 token 哈希。二维码只携带短期 loginNo 与 nonce，浏览器密钥通过 x-ttz-browser-secret 请求头轮询，确认后只能原子消费一次。
+
 ## 数据库安全
 
 迁移只在本地或临时库评审、演练。任何命令都不会自动连接或修改生产数据库；生产执行前必须备份并由维护者显式运行 prisma migrate deploy。

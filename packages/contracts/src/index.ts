@@ -10,6 +10,23 @@ export const pageQuerySchema = z.object({
 export const privilegeSchema = z.union([z.literal(0), z.literal(1), z.literal(2)]);
 export type Privilege = z.infer<typeof privilegeSchema>;
 
+export const wechatCodeLoginSchema = z.object({
+  code: z.string().trim().min(6).max(128),
+  wxNickname: z.string().trim().min(1).max(255).optional(),
+  guildNickname: z.string().trim().min(1).max(255).optional(),
+});
+export type WechatCodeLoginInput = z.infer<typeof wechatCodeLoginSchema>;
+
+export const memberProfileSchema = z.object({
+  name: z.string().trim().min(1).max(255).nullable().optional(),
+  wxNickname: z.string().trim().min(1).max(255),
+  guildNickname: z.string().trim().min(1).max(255),
+});
+export type MemberProfileInput = z.infer<typeof memberProfileSchema>;
+
+export const refreshTokenSchema = z.object({ refreshToken: z.string().trim().min(32).max(256) });
+export const qrSessionProofSchema = z.object({ nonce: z.string().trim().min(32).max(256) });
+
 export const attendanceStatusSchema = z.enum([
   "UNKNOWN",
   "PRESENT",

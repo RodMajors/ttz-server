@@ -7,6 +7,7 @@ import { AttendanceModule } from "./attendance/attendance.module";
 import { ApprovedMemberGuard } from "./auth/approved-member.guard";
 import { AuthModule } from "./auth/auth.module";
 import { PrivilegeGuard } from "./auth/privilege.guard";
+import { SessionAuthGuard } from "./auth/session-auth.guard";
 import { RequestIdMiddleware } from "./common/request-id.middleware";
 import { DatabaseModule } from "./database/database.module";
 import { HealthController } from "./health.controller";
@@ -27,6 +28,7 @@ import { WarcraftLogsModule } from "./warcraft-logs/warcraft-logs.module";
   ],
   controllers: [HealthController],
   providers: [
+    { provide: APP_GUARD, useClass: SessionAuthGuard },
     { provide: APP_GUARD, useClass: ApprovedMemberGuard },
     { provide: APP_GUARD, useClass: PrivilegeGuard },
   ],

@@ -10,6 +10,13 @@ export const envSchema = z.object({
   WECHAT_APP_SECRET: z.string().default(""),
   WCL_CLIENT_ID: z.string().default(""),
   WCL_CLIENT_SECRET: z.string().default(""),
+  SESSION_COOKIE_NAME: z.string().trim().min(1).default("ttz_session"),
+  SESSION_TTL_SECONDS: z.coerce.number().int().min(300).max(2_592_000).default(604_800),
+  QR_SESSION_TTL_SECONDS: z.coerce.number().int().min(60).max(900).default(300),
+  ALLOW_DEV_AUTH_HEADER: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

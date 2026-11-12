@@ -4,6 +4,9 @@ import type { AuthRequest, AuthUser } from "./auth.types";
 export const IS_PUBLIC_KEY = "ttz:is-public";
 export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
 
+export const ALLOW_UNAPPROVED_KEY = "ttz:allow-unapproved";
+export const AllowUnapproved = () => SetMetadata(ALLOW_UNAPPROVED_KEY, true);
+
 export const MIN_PRIVILEGE_KEY = "ttz:min-privilege";
 export const MinPrivilege = (level: 1 | 2) => SetMetadata(MIN_PRIVILEGE_KEY, level);
 
