@@ -27,56 +27,69 @@ const worker = new Worker(
         where: { isRetired: 0, user: { isApproved: 1, status: 1 } },
         select: { id: true, userId: true, name: true, realm: true, wclId: true },
       });
-      const matchedUsers = new Map<string, bigint>();
+      const previousActors = await prisma.wclReportActor.findMany({
+        where: { reportId, matchedBy: { not: null } },
+        select: { actorId: true, characterId: true, matchStatus: true },
+      });
       const actors = imported.actors.map((actor) => {
+        const previous = previousActors.find((entry) => entry.actorId === BigInt(actor.id));
         const gameId = actor.gameID;
-        const matched =
-          gameId != null
+        const matched = previous
+          ? candidateCharacters.find((character) => character.id === previous.characterId)
+          : gameId != null
             ? candidateCharacters.find((character) => character.wclId === BigInt(gameId))
             : candidateCharacters.find(
                 (character) =>
                   normalize(character.name) === normalize(actor.name) &&
                   normalize(character.realm) === normalize(actor.server ?? ""),
               );
-        if (matched) matchedUsers.set(matched.userId.toString(), matched.id);
         return {
           reportId,
           actorId: BigInt(actor.id),
           actorName: actor.name.slice(0, 64),
           realmName: actor.server?.slice(0, 64) ?? null,
           characterId: matched?.id ?? null,
-          matchStatus: matched ? 1 : 0,
+          matchStatus: previous?.matchStatus ?? (matched ? 1 : 0),
           matchedAt: matched ? new Date() : null,
         };
       });
-      const attendanceSuggestions = [...matchedUsers.entries()].map(([userId, characterId]) => ({
-        reportId,
-        userId: BigInt(userId),
-        characterId,
-        status: 1,
-      }));
       const reportStartAt = new Date(imported.startTime);
       const reportEndAt = new Date(imported.endTime);
       await prisma.$transaction(async (transaction) => {
         for (const actor of actors) {
-          await transaction.wclReportActor.upsert({
-            where: { reportId_actorId: { reportId, actorId: actor.actorId } },
-            create: actor,
-            update: {
+          await transaction.wclReportActor.createMany({ data: [actor], skipDuplicates: true });
+          await transaction.wclReportActor.updateMany({
+            where: { reportId, actorId: actor.actorId, matchedBy: null },
+            data: {
               actorName: actor.actorName,
               realmName: actor.realmName,
-              ...(actor.matchStatus === 1
-                ? { characterId: actor.characterId, matchStatus: actor.matchStatus, matchedAt: actor.matchedAt }
-                : {}),
+              characterId: actor.characterId,
+              matchStatus: actor.matchStatus,
+              matchedAt: actor.matchedAt,
             },
           });
         }
-        if (attendanceSuggestions.length) {
-          for (const suggestion of attendanceSuggestions) {
-            await transaction.wclAttendanceSuggestion.upsert({
-              where: { reportId_userId: { reportId, userId: suggestion.userId } },
-              create: suggestion,
-              update: { characterId: suggestion.characterId, status: suggestion.status },
+        const savedActors = await transaction.wclReportActor.findMany({
+          where: {
+            reportId,
+            actorId: { in: actors.map((actor) => actor.actorId) },
+            matchStatus: 1,
+            characterId: { not: null },
+          },
+          include: { character: { select: { id: true, userId: true } } },
+        });
+        const savedSuggestions = new Map(
+          savedActors.flatMap((actor) =>
+            actor.character ? [[actor.character.userId.toString(), actor.character.id] as const] : [],
+          ),
+        );
+        if (savedSuggestions.size) {
+          for (const [userId, characterId] of savedSuggestions) {
+            const suggestion = { reportId, userId: BigInt(userId), characterId, status: 1 };
+            await transaction.wclAttendanceSuggestion.createMany({ data: [suggestion], skipDuplicates: true });
+            await transaction.wclAttendanceSuggestion.updateMany({
+              where: { reportId, userId: suggestion.userId, appliedAt: null },
+              data: { characterId: suggestion.characterId, status: suggestion.status },
             });
           }
         }
