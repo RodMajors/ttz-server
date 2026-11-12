@@ -282,9 +282,16 @@ function serializeCharacter(character: {
   itemLevelUpdatedAt: Date | null;
 }) {
   return {
-    ...character,
     id: character.id.toString(),
     userId: character.userId.toString(),
+    name: character.name,
+    realm: character.realm,
+    faction: character.faction,
+    specId: character.spec,
+    isMain: character.isMain === 1,
+    isRetired: character.isRetired === 1,
+    itemLevel: character.itemLevel,
+    itemLevelUpdatedAt: character.itemLevelUpdatedAt?.toISOString() ?? null,
     wclId: character.wclId?.toString() ?? null,
   };
 }

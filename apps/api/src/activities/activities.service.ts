@@ -2,7 +2,13 @@ import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundExce
 import type { CreateActivityInput, Role, SignupInput, UpdateActivityInput } from "@ttz/contracts";
 import type { AuthUser } from "../auth/auth.types";
 import { PrismaService } from "../database/prisma.service";
-import { attendanceStatusToCode, roleToCode, signupStatusToCode } from "./activity.constants";
+import {
+  activityCodeToStatus,
+  attendanceStatusToCode,
+  roleToCode,
+  signupCodeToStatus,
+  signupStatusToCode,
+} from "./activity.constants";
 import { canMemberChangeSignup } from "./signup-policy";
 
 @Injectable()
@@ -63,14 +69,45 @@ export class ActivitiesService {
     });
     if (!activity) throw new NotFoundException({ code: "ACTIVITY_NOT_FOUND", message: "活动不存在" });
     const canManage = activity.creator === user.id || user.privilege >= 1;
+    const now = new Date();
+    const mySignup = activity.signups.find((signup) => signup.userId === user.id);
+    const canChangeMySignup = canMemberChangeSignup({
+      now,
+      signupDeadline: activity.signupDeadline,
+      activityStatus: activity.status,
+      rosterLockedAt: activity.rosterLockedAt,
+      signupStatus: mySignup ? signupCodeToStatus[mySignup.status] : undefined,
+    });
     return {
-      ...activity,
+      id: activity.id.toString(),
+      name: activity.name,
+      type: activity.typeDefinition.code,
+      status: activityCodeToStatus[activity.status] ?? "DRAFT",
+      description: activity.description,
+      passphrase: activity.passphrase,
+      beginAt: activity.beginAt.toISOString(),
+      endAt: activity.endAt.toISOString(),
+      teamUpAt: (activity.teamUpAt ?? new Date(activity.beginAt.getTime() - 20 * 60_000)).toISOString(),
+      signupDeadline: activity.signupDeadline?.toISOString() ?? null,
+      maxPlayers: activity.maxPlayers,
+      tankSlots: activity.tankSlots,
+      healerSlots: activity.healerSlots,
+      meleeSlots: activity.meleeSlots,
+      rangedSlots: activity.rangedSlots,
+      attendanceEnabled: activity.attendanceEnabled === 1,
+      rosterLockedAt: activity.rosterLockedAt?.toISOString() ?? null,
+      version: activity.version,
+      creator: {
+        id: activity.creatorUser.id.toString(),
+        name: activity.creatorUser.name ?? activity.creatorUser.guildNickname ?? "TTZ 成员",
+      },
       canManage,
-      signups: activity.signups.map((signup) => ({
-        ...signup,
-        officerNote: canManage ? signup.officerNote : undefined,
-        decisionReason: canManage ? signup.decisionReason : undefined,
-      })),
+      canSignup:
+        canChangeMySignup &&
+        (!mySignup || [signupStatusToCode.CANCELLED, signupStatusToCode.REJECTED].includes(mySignup.status)),
+      canChangeMySignup,
+      mySignup: mySignup ? serializeSignup(mySignup, canManage) : null,
+      signups: activity.signups.map((signup) => serializeSignup(signup, canManage)),
     };
   }
 
@@ -346,29 +383,38 @@ export class ActivitiesService {
     user: AuthUser,
   ) {
     await this.requireManageable(id, user);
-    const signup = await this.prisma.activitySignup.findFirst({ where: { id: signupId, activityId: id } });
-    if (!signup) throw new NotFoundException({ code: "SIGNUP_NOT_FOUND", message: "报名记录不存在" });
-    if (input.status === "CONFIRMED" && signup.status !== signupStatusToCode.CONFIRMED) {
-      const confirmedCount = await this.prisma.activitySignup.count({
-        where: { activityId: id, status: signupStatusToCode.CONFIRMED },
+    return this.prisma.$transaction(async (transaction) => {
+      const activity = await transaction.activity.update({
+        where: { id },
+        data: { version: { increment: 1 } },
+        select: { maxPlayers: true, status: true },
       });
-      const activity = await this.prisma.activity.findUnique({ where: { id }, select: { maxPlayers: true } });
-      if (activity && confirmedCount >= activity.maxPlayers) {
-        throw new ConflictException({ code: "ROSTER_FULL", message: "正式名单已达到人数上限" });
+      if (activity.status >= 2) {
+        throw new ConflictException({ code: "ACTIVITY_READ_ONLY", message: "已结束或已取消的活动不能处理报名" });
       }
-    }
-    return this.prisma.activitySignup.update({
-      where: { id: signupId },
-      data: {
-        status: signupStatusToCode[input.status],
-        officerNote: input.officerNote,
-        decisionReason: input.reason,
-        groupNo: input.groupNo,
-        orderIndex: input.orderIndex,
-        handledBy: user.id,
-        handledAt: new Date(),
-        confirmedAt: input.status === "CONFIRMED" ? new Date() : null,
-      },
+      const signup = await transaction.activitySignup.findFirst({ where: { id: signupId, activityId: id } });
+      if (!signup) throw new NotFoundException({ code: "SIGNUP_NOT_FOUND", message: "报名记录不存在" });
+      if (input.status === "CONFIRMED" && signup.status !== signupStatusToCode.CONFIRMED) {
+        const confirmedCount = await transaction.activitySignup.count({
+          where: { activityId: id, status: signupStatusToCode.CONFIRMED },
+        });
+        if (confirmedCount >= activity.maxPlayers) {
+          throw new ConflictException({ code: "ROSTER_FULL", message: "正式名单已达到人数上限" });
+        }
+      }
+      return transaction.activitySignup.update({
+        where: { id: signupId },
+        data: {
+          status: signupStatusToCode[input.status],
+          officerNote: input.officerNote,
+          decisionReason: input.reason,
+          groupNo: input.groupNo,
+          orderIndex: input.orderIndex,
+          handledBy: user.id,
+          handledAt: new Date(),
+          confirmedAt: input.status === "CONFIRMED" ? new Date() : null,
+        },
+      });
     });
   }
 
@@ -539,4 +585,71 @@ function versionConflict() {
     code: "VERSION_CONFLICT",
     message: "活动已被其他人更新，请刷新后重试",
   });
+}
+
+const roleCodeToRole = [null, "TANK", "HEALER", "MELEE", "RANGED"] as const;
+
+function serializeCharacter(character: {
+  id: bigint;
+  userId: bigint;
+  name: string;
+  realm: string;
+  faction: number | null;
+  spec: number | null;
+  isMain: number;
+  isRetired: number;
+  itemLevel: number | null;
+}) {
+  return {
+    id: character.id.toString(),
+    userId: character.userId.toString(),
+    name: character.name,
+    realm: character.realm,
+    faction: character.faction,
+    specId: character.spec,
+    isMain: character.isMain === 1,
+    isRetired: character.isRetired === 1,
+    itemLevel: character.itemLevel,
+  };
+}
+
+function serializeSignup(
+  signup: {
+    id: bigint;
+    userId: bigint;
+    preferredRole: number | null;
+    preferredSpecId: number | null;
+    groupNo: number | null;
+    orderIndex: number;
+    status: number;
+    note: string | null;
+    officerNote: string | null;
+    decisionReason: string | null;
+    signedUpAt: Date;
+    user: { id: bigint; name: string | null; guildNickname: string | null };
+    character: Parameters<typeof serializeCharacter>[0];
+    choices: Array<{ character: Parameters<typeof serializeCharacter>[0]; specId: number; priority: number }>;
+  },
+  canManage: boolean,
+) {
+  return {
+    id: signup.id.toString(),
+    userId: signup.userId.toString(),
+    memberName: signup.user.name ?? signup.user.guildNickname ?? "TTZ 成员",
+    character: serializeCharacter(signup.character),
+    preferredRole: roleCodeToRole[signup.preferredRole ?? 0] ?? null,
+    preferredSpecId: signup.preferredSpecId,
+    groupNo: signup.groupNo,
+    orderIndex: signup.orderIndex,
+    status: signupCodeToStatus[signup.status] ?? "PENDING",
+    note: signup.note,
+    officerNote: canManage ? signup.officerNote : undefined,
+    decisionReason: canManage ? signup.decisionReason : undefined,
+    signedUpAt: signup.signedUpAt.toISOString(),
+    choices: signup.choices.map((choice) => ({
+      character: serializeCharacter(choice.character),
+      specId: choice.specId,
+      priority: choice.priority,
+    })),
+  };
 }

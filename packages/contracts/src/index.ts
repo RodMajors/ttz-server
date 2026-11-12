@@ -109,6 +109,72 @@ export const activityListSchema = z.object({
 });
 export type ActivityList = z.infer<typeof activityListSchema>;
 
+export const characterSummarySchema = z.object({
+  id: idSchema,
+  userId: idSchema,
+  name: z.string(),
+  realm: z.string(),
+  faction: z.number().int().nullable(),
+  specId: z.number().int().nullable(),
+  isMain: z.boolean(),
+  isRetired: z.boolean(),
+  itemLevel: z.number().int().nullable(),
+});
+export type CharacterSummary = z.infer<typeof characterSummarySchema>;
+export const characterListSchema = z.array(characterSummarySchema);
+
+export const activitySignupSchema = z.object({
+  id: idSchema,
+  userId: idSchema,
+  memberName: z.string(),
+  character: characterSummarySchema,
+  preferredRole: roleSchema.nullable(),
+  preferredSpecId: z.number().int().nullable(),
+  groupNo: z.number().int().nullable(),
+  orderIndex: z.number().int(),
+  status: signupStatusSchema,
+  note: z.string().nullable(),
+  officerNote: z.string().nullable().optional(),
+  decisionReason: z.string().nullable().optional(),
+  signedUpAt: isoDateTimeSchema,
+  choices: z.array(
+    z.object({
+      character: characterSummarySchema,
+      specId: z.number().int(),
+      priority: z.number().int(),
+    }),
+  ),
+});
+export type ActivitySignup = z.infer<typeof activitySignupSchema>;
+
+export const activityDetailSchema = z.object({
+  id: idSchema,
+  name: z.string(),
+  type: activityTypeCodeSchema,
+  status: activityStatusSchema,
+  description: z.string().nullable(),
+  passphrase: z.string().nullable(),
+  beginAt: isoDateTimeSchema,
+  endAt: isoDateTimeSchema,
+  teamUpAt: isoDateTimeSchema,
+  signupDeadline: isoDateTimeSchema.nullable(),
+  maxPlayers: z.number().int(),
+  tankSlots: z.number().int().nullable(),
+  healerSlots: z.number().int().nullable(),
+  meleeSlots: z.number().int().nullable(),
+  rangedSlots: z.number().int().nullable(),
+  attendanceEnabled: z.boolean(),
+  rosterLockedAt: isoDateTimeSchema.nullable(),
+  version: z.number().int(),
+  creator: z.object({ id: idSchema, name: z.string() }),
+  canManage: z.boolean(),
+  canSignup: z.boolean(),
+  canChangeMySignup: z.boolean(),
+  mySignup: activitySignupSchema.nullable(),
+  signups: z.array(activitySignupSchema),
+});
+export type ActivityDetail = z.infer<typeof activityDetailSchema>;
+
 const activityFieldsSchema = z.object({
   name: z.string().trim().min(2).max(64),
   type: activityTypeCodeSchema,
