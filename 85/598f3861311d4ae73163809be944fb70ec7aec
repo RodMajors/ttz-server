@@ -1,0 +1,42 @@
+apps/api/src/activities/activities.service.ts
+  h_745ff005454789 19-22,33-36,52,55-60,84-86,139,150,163-170,174-179,190,192
+apps/api/src/activities/activity-detail.test.ts
+  h_745ff005454789 6-15
+apps/api/src/announcements/announcements.controller.test.ts
+  h_745ff005454789 1-73
+apps/api/src/announcements/announcements.controller.ts
+  h_745ff005454789 1-146
+apps/api/src/announcements/announcements.module.ts
+  h_745ff005454789 1-5
+apps/api/src/app.module.ts
+  h_745ff005454789 6,26
+apps/api/src/auth/auth.service.test.ts
+  h_745ff005454789 6-38
+apps/api/src/auth/auth.service.ts
+  h_745ff005454789 90-97,240,250-251
+apps/api/src/auth/auth.types.ts
+  h_745ff005454789 8-9
+apps/api/src/auth/session-auth.guard.ts
+  h_745ff005454789 79,89-90
+apps/api/src/public/public.controller.test.ts
+  h_745ff005454789 1-43
+apps/api/src/public/public.controller.ts
+  h_745ff005454789 1-13,33-50,52,58-105
+apps/api/src/public/public.module.ts
+  h_745ff005454789 2-3
+packages/contracts/src/index.ts
+  h_745ff005454789 36-37,105-106,186,196,473-558
+packages/database/prisma/schema.prisma
+  h_745ff005454789 28-29,311-312,353-388
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "85598f3861311d4ae73163809be944fb70ec7aec",
+  "prompts": {},
+  "humans": {
+    "h_745ff005454789": {
+      "author": "RodMajors <pro-vana@outlook.com>"
+    }
+  }
+}
