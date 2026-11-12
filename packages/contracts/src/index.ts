@@ -241,6 +241,43 @@ export const memberListQuerySchema = pageQuerySchema.extend({
   search: z.string().trim().max(100).optional(),
   groupId: idSchema.optional(),
 });
+export const guildGroupSchema = z.object({
+  id: idSchema,
+  name: z.string(),
+  code: z.string(),
+  description: z.string().nullable(),
+  isActive: z.boolean(),
+  sort: z.number().int(),
+});
+export const guildGroupListSchema = z.array(guildGroupSchema);
+export const memberListSchema = z.object({
+  items: z.array(
+    z.object({
+      id: idSchema,
+      name: z.string().nullable(),
+      wxNickname: z.string().nullable(),
+      guildNickname: z.string().nullable(),
+      avatar: z.string().nullable(),
+      privilege: privilegeSchema,
+      characters: z.array(characterSummarySchema),
+      groups: z.array(guildGroupSchema.pick({ id: true, name: true, code: true })),
+    }),
+  ),
+  pagination: z.object({ page: z.number(), pageSize: z.number(), total: z.number() }),
+});
+export const pendingMemberListSchema = z.object({
+  items: z.array(
+    z.object({
+      id: idSchema,
+      name: z.string().nullable(),
+      wxNickname: z.string().nullable(),
+      guildNickname: z.string().nullable(),
+      avatar: z.string().nullable(),
+      createdAt: isoDateTimeSchema,
+    }),
+  ),
+  pagination: z.object({ page: z.number(), pageSize: z.number(), total: z.number() }),
+});
 
 export const guildGroupInputSchema = z.object({
   name: z.string().trim().min(1).max(64),

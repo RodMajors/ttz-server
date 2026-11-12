@@ -9,6 +9,7 @@ import {
   memberListQuerySchema,
   memberPrivilegeSchema,
   memberStatusSchema,
+  notificationPreferenceSchema,
   pageQuerySchema,
   type UpdateCharacterInput,
   updateCharacterSchema,
@@ -137,6 +138,37 @@ export class MembersController {
     return this.characters.retire(user.id, BigInt(id));
   }
 
+  @Get("notification-preferences")
+  async notificationPreferences(@CurrentUser() user: AuthUser) {
+    const preference = await this.prisma.notificationPreference.findUnique({ where: { userId: user.id } });
+    return {
+      activityPublished: preference ? preference.activityPublished === 1 : true,
+      signupResult: preference ? preference.signupResult === 1 : true,
+      beforeTeamUp: preference ? preference.beforeTeamUp === 1 : true,
+      activityCancelled: preference ? preference.activityCancelled === 1 : true,
+    };
+  }
+
+  @Patch("notification-preferences")
+  async updateNotificationPreferences(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(notificationPreferenceSchema))
+    body: { activityPublished: boolean; signupResult: boolean; beforeTeamUp: boolean; activityCancelled: boolean },
+  ) {
+    const values = {
+      activityPublished: body.activityPublished ? 1 : 0,
+      signupResult: body.signupResult ? 1 : 0,
+      beforeTeamUp: body.beforeTeamUp ? 1 : 0,
+      activityCancelled: body.activityCancelled ? 1 : 0,
+    };
+    await this.prisma.notificationPreference.upsert({
+      where: { userId: user.id },
+      create: { userId: user.id, ...values },
+      update: values,
+    });
+    return body;
+  }
+
   @Post("members/:id/approval")
   @MinPrivilege(1)
   approve(
@@ -197,7 +229,7 @@ export class MembersController {
       where: { isActive: 1 },
       orderBy: [{ sort: "asc" }, { name: "asc" }],
     });
-    return groups.map((group) => ({ ...group, id: group.id.toString() }));
+    return groups.map(serializeGroup);
   }
 
   @Post("guild-groups")
@@ -214,7 +246,7 @@ export class MembersController {
     const group = await this.prisma.guildGroup.create({
       data: { ...body, isActive: body.isActive ? 1 : 0 },
     });
-    return { ...group, id: group.id.toString() };
+    return serializeGroup(group);
   }
 
   @Patch("guild-groups/:id")
@@ -239,18 +271,19 @@ export class MembersController {
         ...(body.isActive !== undefined ? { isActive: body.isActive ? 1 : 0 } : {}),
       },
     });
-    return { ...group, id: group.id.toString() };
+    return serializeGroup(group);
   }
 
   @Post("guild-groups/:id/members")
   @MinPrivilege(1)
   async addToGroup(
+    @CurrentUser() user: AuthUser,
     @Param("id", new ZodValidationPipe(idSchema)) id: string,
     @Body(new ZodValidationPipe(guildGroupMemberSchema)) body: { userId: string },
   ) {
     return this.prisma.guildGroupMember.upsert({
       where: { groupId_userId: { groupId: BigInt(id), userId: BigInt(body.userId) } },
-      create: { groupId: BigInt(id), userId: BigInt(body.userId) },
+      create: { groupId: BigInt(id), userId: BigInt(body.userId), addedBy: user.id },
       update: {},
     });
   }
@@ -266,6 +299,24 @@ export class MembersController {
     });
     return { removed: result.count > 0 };
   }
+}
+
+function serializeGroup(group: {
+  id: bigint;
+  name: string;
+  code: string;
+  description: string | null;
+  isActive: number;
+  sort: number;
+}) {
+  return {
+    id: group.id.toString(),
+    name: group.name,
+    code: group.code,
+    description: group.description,
+    isActive: group.isActive === 1,
+    sort: group.sort,
+  };
 }
 
 function serializeCharacter(character: {
