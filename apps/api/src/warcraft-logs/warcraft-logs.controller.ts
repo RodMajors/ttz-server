@@ -111,6 +111,7 @@ export class WarcraftLogsController {
       const actor = actorRows.find((row) => row.actorId === BigInt(mapping.actorId));
       if (!actor) continue;
       let characterId: bigint | null = null;
+      let characterUserId: bigint | null = null;
       if (mapping.characterId && !mapping.ignored) {
         characterId = BigInt(mapping.characterId);
         const character = await this.prisma.character.findFirst({
@@ -118,26 +119,37 @@ export class WarcraftLogsController {
             id: characterId,
             isRetired: 0,
             user: { isApproved: 1, status: 1 },
-            OR: [{ wclId: BigInt(mapping.actorId) }, { name: actor.actorName, realm: actor.realmName ?? "" }],
           },
         });
         if (!character)
           throw new NotFoundException({ code: "CHARACTER_NOT_FOUND", message: "角色不匹配或不属于当前成员" });
-        if (
-          actor.realmName &&
-          actor.realmName.normalize("NFKC").toLowerCase() !== character.realm.normalize("NFKC").toLowerCase()
-        ) {
-          throw new NotFoundException({ code: "WCL_REALM_MISMATCH", message: "角色服务器与 WCL 报告不匹配" });
-        }
+        characterUserId = character.userId;
       }
-      await this.prisma.wclReportActor.updateMany({
-        where: { reportId: report.id, actorId: BigInt(mapping.actorId) },
-        data: {
-          characterId,
-          matchStatus: mapping.ignored ? 2 : characterId ? 1 : 0,
-          matchedBy: user.id,
-          matchedAt: new Date(),
-        },
+      await this.prisma.$transaction(async (transaction) => {
+        await transaction.wclReportActor.updateMany({
+          where: { reportId: report.id, actorId: BigInt(mapping.actorId) },
+          data: {
+            characterId,
+            matchStatus: mapping.ignored ? 2 : characterId ? 1 : 0,
+            matchedBy: user.id,
+            matchedAt: new Date(),
+          },
+        });
+        if (characterId && characterUserId) {
+          const existing = await transaction.wclAttendanceSuggestion.findUnique({
+            where: { reportId_userId: { reportId: report.id, userId: characterUserId } },
+          });
+          if (!existing) {
+            await transaction.wclAttendanceSuggestion.create({
+              data: { reportId: report.id, userId: characterUserId, characterId, status: 1 },
+            });
+          } else if (!existing.appliedAt) {
+            await transaction.wclAttendanceSuggestion.updateMany({
+              where: { id: existing.id, appliedAt: null },
+              data: { characterId },
+            });
+          }
+        }
       });
     }
     return { updated: body.mappings.length };
