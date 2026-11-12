@@ -1,0 +1,18 @@
+apps/api/src/members/members.controller.test.ts
+  h_745ff005454789 1-61
+apps/api/src/members/members.controller.ts
+  h_745ff005454789 12,141-171,232,249,274,280,286,304-321
+packages/contracts/src/index.ts
+  h_745ff005454789 244-280
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b68196ce93a5866e0192ade6ee463b18d40a8d91",
+  "prompts": {},
+  "humans": {
+    "h_745ff005454789": {
+      "author": "RodMajors <pro-vana@outlook.com>"
+    }
+  }
+}
