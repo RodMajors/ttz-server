@@ -3,6 +3,39 @@ import type { PrismaService } from "../database/prisma.service";
 import { AuthService, hash } from "./auth.service";
 
 describe("AuthService QR session state machine", () => {
+  it("returns a rejected profile to pending review when the member updates it", async () => {
+    const update = vi.fn().mockResolvedValue({
+      id: 7n,
+      name: "Updated",
+      guildNickname: "TTZ Updated",
+      wxNickname: "WeChat Updated",
+      privilege: 0,
+      isApproved: 0,
+      rejectReason: null,
+      status: 1,
+    });
+    const service = createService({ user: { update } });
+
+    const result = await service.updateProfile(
+      { ...member(), approvalStatus: "REJECTED", rejectReason: "资料不完整" },
+      { name: "Updated", guildNickname: "TTZ Updated", wxNickname: "WeChat Updated" },
+    );
+
+    expect(update).toHaveBeenCalledWith({
+      where: { id: 7n },
+      data: {
+        name: "Updated",
+        guildNickname: "TTZ Updated",
+        wxNickname: "WeChat Updated",
+        isApproved: 0,
+        rejectReason: null,
+        reviewedBy: null,
+        reviewedAt: null,
+      },
+    });
+    expect(result).toMatchObject({ approvalStatus: "PENDING", rejectReason: null });
+  });
+
   it("rejects a refresh token already rotated by another request", async () => {
     const updateMany = vi.fn().mockResolvedValue({ count: 0 });
     const service = createService({

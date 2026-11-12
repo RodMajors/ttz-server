@@ -33,6 +33,8 @@ export const authUserSchema = z.object({
   guildNickname: z.string().nullable(),
   privilege: privilegeSchema,
   isApproved: z.boolean(),
+  approvalStatus: z.enum(["PENDING", "APPROVED", "REJECTED"]),
+  rejectReason: z.string().nullable(),
   profileComplete: z.boolean(),
   status: z.number().int(),
 });
@@ -100,6 +102,8 @@ export const activitySummarySchema = z.object({
   confirmedCount: z.number().int().nonnegative(),
   creatorName: z.string(),
   canManage: z.boolean(),
+  mySignupStatus: signupStatusSchema.nullable(),
+  isSignupOpen: z.boolean(),
 });
 export type ActivitySummary = z.infer<typeof activitySummarySchema>;
 
@@ -179,6 +183,7 @@ const activityFieldsSchema = z.object({
   name: z.string().trim().min(2).max(64),
   type: activityTypeCodeSchema,
   description: z.string().trim().max(10_000).optional(),
+  passphrase: z.string().trim().max(255).nullable().optional(),
   beginAt: isoDateTimeSchema,
   teamUpAt: isoDateTimeSchema.optional(),
   signupDeadline: isoDateTimeSchema,
@@ -188,7 +193,7 @@ const activityFieldsSchema = z.object({
   healerSlots: z.number().int().min(0).max(100).nullable().optional(),
   meleeSlots: z.number().int().min(0).max(100).nullable().optional(),
   rangedSlots: z.number().int().min(0).max(100).nullable().optional(),
-  attendanceEnabled: z.boolean().default(false),
+  attendanceEnabled: z.boolean().optional(),
 });
 
 export const createActivitySchema = activityFieldsSchema.superRefine((value, context) => {
@@ -465,6 +470,92 @@ export type WclReportDetail = z.infer<typeof wclReportDetailSchema>;
 
 export const siteSettingKeySchema = z.enum(["guild_profile", "recruitment", "contact", "tool_links"]);
 export const siteSettingSchema = z.object({ key: siteSettingKeySchema, value: z.record(z.string(), z.unknown()) });
+export const siteSettingValueSchema = z.record(z.string(), z.unknown());
+
+export const guildProfileSchema = z
+  .object({
+    name: z.string().default("The Twilight Zone"),
+    tagline: z.string().default("用有限的时间，打出值得记住的开荒。"),
+    description: z.string().default("伊森利恩部落公会，重视效率、体验与长期稳定。"),
+    realm: z.string().default("伊森利恩"),
+    faction: z.string().default("部落"),
+    schedule: z.array(z.string()).default([]),
+    highlights: z.array(z.string()).default([]),
+  })
+  .passthrough();
+export const recruitmentSettingSchema = z
+  .object({
+    title: z.string().default("加入 TTZ"),
+    description: z.string().default("欢迎稳定、友善并愿意共同进步的玩家。"),
+    needs: z
+      .array(z.object({ role: z.string(), priority: z.string().optional(), description: z.string().optional() }))
+      .default([]),
+    requirements: z.array(z.string()).default([]),
+    ngaUrl: z.string().url().nullable().optional(),
+  })
+  .passthrough();
+export const contactSettingSchema = z
+  .object({
+    email: z.string().email().nullable().optional(),
+    wechatLabel: z.string().nullable().optional(),
+    wechatQrUrl: z.string().url().nullable().optional(),
+  })
+  .passthrough();
+export const toolLinkSchema = z.object({ name: z.string(), url: z.string().url(), description: z.string().optional() });
+export const toolLinksSettingSchema = z.object({ links: z.array(toolLinkSchema).default([]) }).passthrough();
+export const publicProgressSchema = z.object({
+  source: z.literal("WCL"),
+  region: z.literal("CN"),
+  serverId: z.literal(569),
+  reports: z.array(
+    z.object({
+      reportCode: z.string(),
+      activityName: z.string(),
+      beginAt: isoDateTimeSchema,
+      summary: z.record(z.string(), z.unknown()).nullable(),
+    }),
+  ),
+});
+
+export const announcementStatusSchema = z.enum(["DRAFT", "ACTIVE", "ARCHIVED"]);
+export const announcementInputSchema = z
+  .object({
+    title: z.string().trim().min(2).max(128),
+    content: z.string().trim().min(1).max(50_000),
+    status: announcementStatusSchema,
+    audienceType: z.enum(["ALL", "GROUPS"]),
+    groupIds: z.array(idSchema).max(50).default([]),
+    isPinned: z.boolean().default(false),
+    publishAt: isoDateTimeSchema,
+    expireAt: isoDateTimeSchema.nullable().optional(),
+  })
+  .superRefine((value, context) => {
+    if (new Set(value.groupIds).size !== value.groupIds.length) {
+      context.addIssue({ code: "custom", path: ["groupIds"], message: "公告身份组不能重复" });
+    }
+    if (value.audienceType === "GROUPS" && !value.groupIds.length) {
+      context.addIssue({ code: "custom", path: ["groupIds"], message: "按身份组投放时至少选择一个身份组" });
+    }
+    if (value.expireAt && new Date(value.expireAt) <= new Date(value.publishAt)) {
+      context.addIssue({ code: "custom", path: ["expireAt"], message: "公告到期时间必须晚于发布时间" });
+    }
+  });
+export type AnnouncementInput = z.infer<typeof announcementInputSchema>;
+export const announcementSchema = z.object({
+  id: idSchema,
+  title: z.string(),
+  content: z.string(),
+  status: announcementStatusSchema,
+  audienceType: z.enum(["ALL", "GROUPS"]),
+  isPinned: z.boolean(),
+  publishAt: isoDateTimeSchema,
+  expireAt: isoDateTimeSchema.nullable(),
+  createdAt: isoDateTimeSchema,
+  updatedAt: isoDateTimeSchema,
+  groupIds: z.array(idSchema),
+  canManage: z.boolean(),
+});
+export const announcementListSchema = z.array(announcementSchema);
 
 export const healthResponseSchema = z.object({
   status: z.literal("ok"),

@@ -3,6 +3,7 @@ import { ConfigModule } from "@nestjs/config";
 import { APP_GUARD } from "@nestjs/core";
 import { parseEnv } from "@ttz/config";
 import { ActivitiesModule } from "./activities/activities.module";
+import { AnnouncementsModule } from "./announcements/announcements.module";
 import { AttendanceModule } from "./attendance/attendance.module";
 import { ApprovedMemberGuard } from "./auth/approved-member.guard";
 import { AuthModule } from "./auth/auth.module";
@@ -22,6 +23,7 @@ import { WarcraftLogsModule } from "./warcraft-logs/warcraft-logs.module";
     AuthModule,
     MembersModule,
     ActivitiesModule,
+    AnnouncementsModule,
     AttendanceModule,
     WarcraftLogsModule,
     PublicModule,

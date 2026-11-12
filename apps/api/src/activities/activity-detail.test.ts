@@ -3,6 +3,16 @@ import type { PrismaService } from "../database/prisma.service";
 import { ActivitiesService } from "./activities.service";
 
 describe("activity detail DTO", () => {
+  it("hides another creator's draft from ordinary members", async () => {
+    const activity = fixture(0);
+    activity.status = 0;
+    const service = new ActivitiesService({
+      activity: { findFirst: vi.fn().mockResolvedValue(activity) },
+    } as unknown as PrismaService);
+
+    await expect(service.get(1n, member())).rejects.toMatchObject({ response: { code: "ACTIVITY_NOT_FOUND" } });
+  });
+
   it.each([
     { signupStatus: 0, canChange: true },
     { signupStatus: 1, canChange: false },

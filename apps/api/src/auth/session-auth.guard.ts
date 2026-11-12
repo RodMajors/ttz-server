@@ -76,6 +76,7 @@ function toAuthUser(user: {
   wxNickname: string | null;
   privilege: number;
   isApproved: number;
+  rejectReason?: string | null;
   status: number;
 }) {
   return {
@@ -85,6 +86,8 @@ function toAuthUser(user: {
     guildNickname: user.guildNickname,
     privilege: user.privilege as 0 | 1 | 2,
     isApproved: user.isApproved === 1,
+    approvalStatus: (["PENDING", "APPROVED", "REJECTED"] as const)[user.isApproved] ?? "PENDING",
+    rejectReason: user.rejectReason ?? null,
     profileComplete: Boolean(user.wxNickname && user.guildNickname),
     status: user.status,
   };

@@ -87,7 +87,14 @@ export class AuthService {
   async updateProfile(user: AuthUser, input: MemberProfileInput) {
     const updated = await this.prisma.user.update({
       where: { id: user.id },
-      data: { name: input.name, wxNickname: input.wxNickname, guildNickname: input.guildNickname },
+      data: {
+        name: input.name,
+        wxNickname: input.wxNickname,
+        guildNickname: input.guildNickname,
+        ...(user.approvalStatus === "REJECTED"
+          ? { isApproved: 0, rejectReason: null, reviewedBy: null, reviewedAt: null }
+          : {}),
+      },
     });
     return this.toAuthUser(updated);
   }
@@ -230,6 +237,7 @@ export class AuthService {
     wxNickname: string | null;
     privilege: number;
     isApproved: number;
+    rejectReason?: string | null;
     status: number;
   }) {
     return {
@@ -239,6 +247,8 @@ export class AuthService {
       guildNickname: user.guildNickname,
       privilege: user.privilege as 0 | 1 | 2,
       isApproved: user.isApproved === 1,
+      approvalStatus: (["PENDING", "APPROVED", "REJECTED"] as const)[user.isApproved] ?? "PENDING",
+      rejectReason: user.rejectReason ?? null,
       profileComplete: Boolean(user.wxNickname && user.guildNickname),
       status: user.status,
     };

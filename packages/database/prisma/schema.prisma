@@ -25,6 +25,8 @@ model User {
   updatedAt     DateTime  @map("updated_at") @updatedAt
 
   activities             Activity[]
+  announcementsCreated   Announcement[] @relation("AnnouncementCreatedBy")
+  announcementsUpdated   Announcement[] @relation("AnnouncementUpdatedBy")
   authSessions           AuthSession[]
   attendanceRecords      AttendanceRecord[]
   characters             Character[]
@@ -306,7 +308,8 @@ model GuildGroup {
   isActive    Int     @map("is_active") @default(1) @db.TinyInt
   sort        Int     @default(0)
 
-  members GuildGroupMember[]
+  announcementGroups AnnouncementGroup[]
+  members            GuildGroupMember[]
 
   @@map("guild_groups")
 }
@@ -346,4 +349,40 @@ model SiteSetting {
   updatedAt DateTime @map("updated_at") @updatedAt
 
   @@map("site_settings")
+}
+
+model Announcement {
+  id           BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  title        String    @db.VarChar(128)
+  content      String    @db.MediumText
+  status       Int       @default(0) @db.TinyInt
+  audienceType Int       @map("audience_type") @default(0) @db.TinyInt
+  isPinned     Int       @map("is_pinned") @default(0) @db.TinyInt
+  publishAt    DateTime  @map("publish_at")
+  expireAt     DateTime? @map("expire_at")
+  createdBy    BigInt    @map("created_by") @db.UnsignedBigInt
+  updatedBy    BigInt    @map("updated_by") @db.UnsignedBigInt
+  createdAt    DateTime  @map("created_at") @default(now())
+  updatedAt    DateTime  @map("updated_at") @updatedAt
+
+  creator User                @relation("AnnouncementCreatedBy", fields: [createdBy], references: [id])
+  updater User                @relation("AnnouncementUpdatedBy", fields: [updatedBy], references: [id])
+  groups  AnnouncementGroup[]
+
+  @@index([status, publishAt, expireAt, isPinned], map: "idx_announcement_publish")
+  @@index([createdBy], map: "idx_announcement_created_by")
+  @@index([updatedBy], map: "idx_announcement_updated_by")
+  @@map("announcements")
+}
+
+model AnnouncementGroup {
+  announcementId BigInt @map("announcement_id") @db.UnsignedBigInt
+  groupId        BigInt @map("group_id") @db.UnsignedBigInt
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  group        GuildGroup   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([announcementId, groupId])
+  @@index([groupId], map: "idx_announcement_group_group")
+  @@map("announcement_groups")
 }

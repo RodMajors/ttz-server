@@ -5,6 +5,8 @@ export interface AuthUser {
   guildNickname: string | null;
   privilege: 0 | 1 | 2;
   isApproved: boolean;
+  approvalStatus?: "PENDING" | "APPROVED" | "REJECTED";
+  rejectReason?: string | null;
   profileComplete: boolean;
   status: number;
 }

@@ -16,7 +16,10 @@ export class ActivitiesService {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   async list(user: AuthUser, page: number, pageSize: number) {
-    const where = { isDeleted: 0 };
+    const where = {
+      isDeleted: 0,
+      ...(user.privilege >= 1 ? {} : { OR: [{ status: { not: 0 } }, { creator: user.id }] }),
+    };
     const [activities, total] = await this.prisma.$transaction([
       this.prisma.activity.findMany({
         where,
@@ -27,7 +30,10 @@ export class ActivitiesService {
           typeDefinition: true,
           creatorUser: { select: { name: true, guildNickname: true } },
           _count: { select: { signups: { where: { status: { in: [0, 1, 2] } } } } },
-          signups: { where: { status: 1 }, select: { id: true } },
+          signups: {
+            where: { OR: [{ status: 1 }, { userId: user.id }] },
+            select: { id: true, userId: true, status: true },
+          },
         },
       }),
       this.prisma.activity.count({ where }),
@@ -43,9 +49,15 @@ export class ActivitiesService {
         maxPlayers: activity.maxPlayers,
         signupDeadline: activity.signupDeadline?.toISOString() ?? null,
         signupCount: activity._count.signups,
-        confirmedCount: activity.signups.length,
+        confirmedCount: activity.signups.filter((signup) => signup.status === signupStatusToCode.CONFIRMED).length,
         creatorName: activity.creatorUser.name ?? activity.creatorUser.guildNickname ?? "TTZ 成员",
         canManage: activity.creator === user.id || user.privilege >= 1,
+        mySignupStatus:
+          signupCodeToStatus[activity.signups.find((signup) => signup.userId === user.id)?.status ?? -1] ?? null,
+        isSignupOpen:
+          activity.status === 1 &&
+          Boolean(activity.signupDeadline && activity.signupDeadline > new Date()) &&
+          !activity.rosterLockedAt,
       })),
       pagination: { page, pageSize, total },
     };
@@ -69,6 +81,9 @@ export class ActivitiesService {
     });
     if (!activity) throw new NotFoundException({ code: "ACTIVITY_NOT_FOUND", message: "活动不存在" });
     const canManage = activity.creator === user.id || user.privilege >= 1;
+    if (activity.status === 0 && !canManage) {
+      throw new NotFoundException({ code: "ACTIVITY_NOT_FOUND", message: "活动不存在" });
+    }
     const now = new Date();
     const mySignup = activity.signups.find((signup) => signup.userId === user.id);
     const canChangeMySignup = canMemberChangeSignup({
@@ -121,6 +136,7 @@ export class ActivitiesService {
         type: type.id,
         creator: user.id,
         description: input.description,
+        passphrase: input.passphrase,
         beginAt,
         teamUpAt: input.teamUpAt ? new Date(input.teamUpAt) : new Date(beginAt.getTime() - 20 * 60_000),
         endAt: new Date(beginAt.getTime() + input.durationMinutes * 60_000),
@@ -131,7 +147,7 @@ export class ActivitiesService {
         healerSlots: input.healerSlots,
         meleeSlots: input.meleeSlots,
         rangedSlots: input.rangedSlots,
-        attendanceEnabled: input.attendanceEnabled ? 1 : 0,
+        attendanceEnabled: (input.attendanceEnabled ?? input.type === "raid_progress") ? 1 : 0,
       },
     });
   }
@@ -144,8 +160,22 @@ export class ActivitiesService {
     const beginAt = input.beginAt ? new Date(input.beginAt) : activity.beginAt;
     const durationMinutes = input.durationMinutes ?? activity.durationMinutes;
     const signupDeadline = input.signupDeadline ? new Date(input.signupDeadline) : activity.signupDeadline;
+    const teamUpAt = input.teamUpAt ? new Date(input.teamUpAt) : activity.teamUpAt;
+    const maxPlayers = input.maxPlayers ?? activity.maxPlayers;
+    const requested = [
+      input.tankSlots === undefined ? activity.tankSlots : input.tankSlots,
+      input.healerSlots === undefined ? activity.healerSlots : input.healerSlots,
+      input.meleeSlots === undefined ? activity.meleeSlots : input.meleeSlots,
+      input.rangedSlots === undefined ? activity.rangedSlots : input.rangedSlots,
+    ].reduce<number>((sum, count) => sum + (count ?? 0), 0);
     if (!signupDeadline || signupDeadline >= beginAt) {
       throw new ConflictException({ code: "INVALID_SIGNUP_DEADLINE", message: "报名截止时间必须早于活动开始时间" });
+    }
+    if (teamUpAt && teamUpAt > beginAt) {
+      throw new ConflictException({ code: "INVALID_TEAM_UP_TIME", message: "集合时间不能晚于活动开始时间" });
+    }
+    if (requested > maxPlayers) {
+      throw new ConflictException({ code: "INVALID_ROLE_SLOTS", message: "职责需求总数不能超过人数上限" });
     }
     const type = input.type ? await this.prisma.activityType.findUnique({ where: { code: input.type } }) : undefined;
     if (input.type && !type) {
@@ -157,8 +187,9 @@ export class ActivitiesService {
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(type ? { type: type.id } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
+        ...(input.passphrase !== undefined ? { passphrase: input.passphrase } : {}),
         beginAt,
-        teamUpAt: input.teamUpAt ? new Date(input.teamUpAt) : activity.teamUpAt,
+        teamUpAt,
         endAt: new Date(beginAt.getTime() + durationMinutes * 60_000),
         signupDeadline,
         durationMinutes,
