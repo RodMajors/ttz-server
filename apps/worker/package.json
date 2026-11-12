@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "build": "node scripts/bundle.mjs",
-    "dev": "tsx watch src/main.ts",
-    "start": "node dist/worker.cjs",
+    "dev": "tsx watch --env-file=../../.env src/main.ts",
+    "start": "node --env-file=../../.env dist/worker.cjs",
     "check": "tsc --noEmit",
     "typecheck": "tsc --noEmit"
   },

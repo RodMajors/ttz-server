@@ -48,7 +48,7 @@ pnpm db:generate
 pnpm dev
 ```
 
-复制 `.env.example` 为 `.env`。主要变量：
+复制 `.env.example` 为仓库根目录的 `.env`。API 与 Worker 的 `dev` / `start` 命令均在执行入口前通过 Node `--env-file=../../.env` 加载该文件；已有环境变量优先。主要变量：
 
 - `DATABASE_URL`：MySQL 连接。不要在文档或仓库中提交生产凭证。
 - `REDIS_URL` / `REDIS_ENABLED`：Redis 与 Worker 开关。

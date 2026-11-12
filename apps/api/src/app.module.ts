@@ -18,7 +18,7 @@ import { WarcraftLogsModule } from "./warcraft-logs/warcraft-logs.module";
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, validate: parseEnv }),
+    ConfigModule.forRoot({ isGlobal: true, ignoreEnvFile: true, validate: parseEnv }),
     DatabaseModule,
     AuthModule,
     MembersModule,
