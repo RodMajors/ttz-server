@@ -1,0 +1,29 @@
+{
+  "name": "ttz-server",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@12.18.0",
+  "engines": {
+    "node": ">=26.13.1 <27"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "check": "turbo run check",
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "db:generate": "pnpm --filter @ttz/database generate",
+    "db:validate": "pnpm --filter @ttz/database check",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.6",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0",
+    "turbo": "^2.5.6"
+  },
+  "lint-staged": {
+    "**/*.{js,mjs,ts}": "./node_modules/.bin/biome check --write --no-errors-on-unmatched"
+  }
+}

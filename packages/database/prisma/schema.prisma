@@ -1,0 +1,279 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  name          String?   @db.VarChar(255)
+  wxNickname    String?   @map("wx_nickname") @db.VarChar(255)
+  guildNickname String?   @map("guild_nickname") @db.VarChar(255)
+  openid        String    @unique @db.VarChar(128)
+  unionid       String?   @db.VarChar(128)
+  avatar        String?   @db.VarChar(255)
+  privilege     Int       @default(0) @db.TinyInt
+  isApproved    Int       @map("is_approved") @default(0) @db.TinyInt
+  reviewedBy    BigInt?   @map("reviewed_by") @db.UnsignedBigInt
+  reviewedAt    DateTime? @map("reviewed_at")
+  rejectReason  String?   @map("reject_reason") @db.VarChar(255)
+  status        Int       @default(1) @db.TinyInt
+  createdAt     DateTime  @map("created_at") @default(now())
+  updatedAt     DateTime  @map("updated_at") @updatedAt
+
+  activities             Activity[]
+  attendanceRecords      AttendanceRecord[]
+  characters             Character[]
+  groupMemberships       GuildGroupMember[]
+  notificationPreference NotificationPreference?
+  signups                ActivitySignup[]
+
+  @@index([isApproved, status], map: "idx_users_approval")
+  @@map("users")
+}
+
+model Character {
+  id                 BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  userId             BigInt    @map("user_id") @db.UnsignedBigInt
+  name               String    @db.VarChar(64)
+  realm              String    @db.VarChar(64)
+  faction            Int?      @db.TinyInt
+  spec               Int?
+  isMain             Int       @map("is_main") @default(0) @db.TinyInt
+  isRetired          Int       @map("is_retired") @default(0) @db.TinyInt
+  wclId              BigInt?   @map("wcl_id") @db.UnsignedBigInt
+  itemLevel          Int?      @map("item_level")
+  itemLevelUpdatedAt DateTime? @map("item_level_updated_at")
+
+  attendanceRecords AttendanceRecord[]
+  signups           ActivitySignup[]
+  signupChoices     ActivitySignupChoice[]
+  user              User                   @relation(fields: [userId], references: [id])
+
+  @@unique([name, realm], map: "uk_char")
+  @@index([userId], map: "idx_user_id")
+  @@map("characters")
+}
+
+model ActivityType {
+  id       BigInt  @id @default(autoincrement()) @db.UnsignedBigInt
+  name     String  @db.VarChar(64)
+  code     String  @unique(map: "uk_activity_type_code") @db.VarChar(32)
+  category String? @db.VarChar(32)
+
+  activities Activity[]
+
+  @@map("activity_types")
+}
+
+model Activity {
+  id                BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  name              String    @db.VarChar(64)
+  type              BigInt    @db.UnsignedBigInt
+  status            Int       @default(0) @db.SmallInt
+  creator           BigInt    @db.UnsignedBigInt
+  description       String?   @db.LongText
+  passphrase        String?   @db.VarChar(255)
+  teamUpAt          DateTime? @map("team_up_at")
+  beginAt           DateTime  @map("begin_at")
+  endAt             DateTime  @map("end_at")
+  signupDeadline    DateTime? @map("signup_deadline")
+  maxPlayers        Int       @map("max_players") @default(20) @db.UnsignedSmallInt
+  tankSlots         Int?      @map("tank_slots") @db.UnsignedSmallInt
+  healerSlots       Int?      @map("healer_slots") @db.UnsignedSmallInt
+  meleeSlots        Int?      @map("melee_slots") @db.UnsignedSmallInt
+  rangedSlots       Int?      @map("ranged_slots") @db.UnsignedSmallInt
+  durationMinutes   Int       @map("duration_minutes") @default(120) @db.UnsignedSmallInt
+  attendanceEnabled Int       @map("attendance_enabled") @default(0) @db.TinyInt
+  publishedAt       DateTime? @map("published_at")
+  rosterLockedAt    DateTime? @map("roster_locked_at")
+  finishedAt        DateTime? @map("finished_at")
+  cancelledAt       DateTime? @map("cancelled_at")
+  version           Int       @default(1) @db.UnsignedInt
+  isDeleted         Int       @map("is_deleted") @default(0) @db.TinyInt
+  createdAt         DateTime  @map("created_at") @default(now())
+  updatedAt         DateTime  @map("updated_at") @updatedAt
+
+  attendanceRecords AttendanceRecord[]
+  creatorUser       User               @relation(fields: [creator], references: [id])
+  signups           ActivitySignup[]
+  typeDefinition    ActivityType       @relation(fields: [type], references: [id])
+  wclReports        WclReport[]
+
+  @@index([isDeleted, status, beginAt], map: "idx_activities_list")
+  @@index([creator, beginAt], map: "idx_activities_creator_time")
+  @@map("activities")
+}
+
+model ActivitySignup {
+  id              BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  activityId      BigInt    @map("activity_id") @db.UnsignedBigInt
+  userId          BigInt    @map("user_id") @db.UnsignedBigInt
+  characterId     BigInt    @map("character_id") @db.UnsignedBigInt
+  preferredRole   Int?      @map("preferred_role") @db.TinyInt
+  preferredSpecId Int?      @map("preferred_spec_id")
+  groupNo         Int?      @map("group_no") @db.UnsignedTinyInt
+  orderIndex      Int       @map("order_index") @default(0) @db.SmallInt
+  status          Int       @default(0) @db.TinyInt
+  note            String?   @db.VarChar(255)
+  officerNote     String?   @map("officer_note") @db.VarChar(255)
+  signedUpAt      DateTime  @map("signed_up_at") @default(now())
+  confirmedAt     DateTime? @map("confirmed_at")
+  cancelledAt     DateTime? @map("cancelled_at")
+  handledBy       BigInt?   @map("handled_by") @db.UnsignedBigInt
+  handledAt       DateTime? @map("handled_at")
+  decisionReason  String?   @map("decision_reason") @db.VarChar(255)
+
+  activity          Activity               @relation(fields: [activityId], references: [id])
+  attendanceRecords AttendanceRecord[]
+  character         Character              @relation(fields: [characterId], references: [id])
+  choices           ActivitySignupChoice[]
+  user              User                   @relation(fields: [userId], references: [id])
+
+  @@unique([activityId, userId], map: "uk_activity_user")
+  @@index([activityId, status], map: "idx_signup_activity_status")
+  @@map("activity_signups")
+}
+
+model ActivitySignupChoice {
+  id          BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  signupId    BigInt   @map("signup_id") @db.UnsignedBigInt
+  characterId BigInt   @map("character_id") @db.UnsignedBigInt
+  specId      Int      @map("spec_id")
+  priority    Int      @db.UnsignedTinyInt
+  createdAt   DateTime @map("created_at") @default(now())
+
+  character Character      @relation(fields: [characterId], references: [id])
+  signup    ActivitySignup @relation(fields: [signupId], references: [id])
+
+  @@unique([signupId, priority], map: "uk_signup_choice_priority")
+  @@unique([signupId, characterId, specId], map: "uk_signup_character_spec")
+  @@map("activity_signup_choices")
+}
+
+model AttendanceRecord {
+  id                    BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  activityId            BigInt    @map("activity_id") @db.UnsignedBigInt
+  signupId              BigInt?   @map("signup_id") @db.UnsignedBigInt
+  userId                BigInt    @map("user_id") @db.UnsignedBigInt
+  characterId           BigInt?   @map("character_id") @db.UnsignedBigInt
+  specId                Int?      @map("spec_id")
+  wclReportId           BigInt?   @map("wcl_report_id") @db.UnsignedBigInt
+  characterNameSnapshot String?   @map("character_name_snapshot") @db.VarChar(64)
+  realmSnapshot         String?   @map("realm_snapshot") @db.VarChar(64)
+  specNameSnapshot      String?   @map("spec_name_snapshot") @db.VarChar(25)
+  roleSnapshot          Int?      @map("role_snapshot") @db.TinyInt
+  status                Int       @default(0) @db.TinyInt
+  source                Int       @default(0) @db.TinyInt
+  note                  String?   @db.VarChar(255)
+  recordedBy            BigInt    @map("recorded_by") @db.UnsignedBigInt
+  recordedAt            DateTime  @map("recorded_at") @default(now())
+  createdAt             DateTime  @map("created_at") @default(now())
+  updatedAt             DateTime  @map("updated_at") @updatedAt
+
+  activity  Activity        @relation(fields: [activityId], references: [id])
+  character Character?      @relation(fields: [characterId], references: [id])
+  signup    ActivitySignup? @relation(fields: [signupId], references: [id])
+  user      User            @relation(fields: [userId], references: [id])
+  wclReport WclReport?      @relation(fields: [wclReportId], references: [id])
+
+  @@unique([activityId, userId], map: "uk_attendance_activity_user")
+  @@index([userId, recordedAt], map: "idx_attendance_user_time")
+  @@map("attendance_records")
+}
+
+model WclReport {
+  id              BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  activityId      BigInt    @map("activity_id") @db.UnsignedBigInt
+  reportCode      String    @map("report_code") @unique(map: "uk_wcl_report_code") @db.VarChar(32)
+  region          String    @default("CN") @db.VarChar(8)
+  serverId        Int       @map("server_id") @default(569)
+  status          Int       @default(0) @db.TinyInt
+  reportStartAt   DateTime? @map("report_start_at")
+  reportEndAt     DateTime? @map("report_end_at")
+  importedAt      DateTime? @map("imported_at")
+  errorMessage    String?   @map("error_message") @db.Text
+  summaryJson     Json?     @map("summary_json")
+  createdBy       BigInt    @map("created_by") @db.UnsignedBigInt
+  createdAt       DateTime  @map("created_at") @default(now())
+  updatedAt       DateTime  @map("updated_at") @updatedAt
+
+  activity          Activity           @relation(fields: [activityId], references: [id])
+  actors            WclReportActor[]
+  attendanceRecords AttendanceRecord[]
+
+  @@index([activityId, createdAt], map: "idx_wcl_report_activity")
+  @@map("wcl_reports")
+}
+
+model WclReportActor {
+  id          BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  reportId    BigInt    @map("report_id") @db.UnsignedBigInt
+  actorId     BigInt    @map("actor_id") @db.UnsignedBigInt
+  actorName   String    @map("actor_name") @db.VarChar(64)
+  realmName   String?   @map("realm_name") @db.VarChar(64)
+  characterId BigInt?   @map("character_id") @db.UnsignedBigInt
+  matchStatus Int       @map("match_status") @default(0) @db.TinyInt
+  matchedBy   BigInt?   @map("matched_by") @db.UnsignedBigInt
+  matchedAt   DateTime? @map("matched_at")
+  createdAt   DateTime  @map("created_at") @default(now())
+  updatedAt   DateTime  @map("updated_at") @updatedAt
+
+  report WclReport @relation(fields: [reportId], references: [id])
+
+  @@unique([reportId, actorId], map: "uk_wcl_report_actor")
+  @@map("wcl_report_actors")
+}
+
+model GuildGroup {
+  id          BigInt  @id @default(autoincrement()) @db.UnsignedBigInt
+  name        String  @unique @db.VarChar(64)
+  code        String  @unique @db.VarChar(32)
+  description String? @db.VarChar(255)
+  isActive    Int     @map("is_active") @default(1) @db.TinyInt
+  sort        Int     @default(0)
+
+  members GuildGroupMember[]
+
+  @@map("guild_groups")
+}
+
+model GuildGroupMember {
+  id        BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  groupId   BigInt   @map("group_id") @db.UnsignedBigInt
+  userId    BigInt   @map("user_id") @db.UnsignedBigInt
+  addedBy   BigInt?  @map("added_by") @db.UnsignedBigInt
+  createdAt DateTime @map("created_at") @default(now())
+
+  group GuildGroup @relation(fields: [groupId], references: [id])
+  user  User       @relation(fields: [userId], references: [id])
+
+  @@unique([groupId, userId], map: "uk_group_member")
+  @@map("guild_group_members")
+}
+
+model NotificationPreference {
+  userId            BigInt   @id @map("user_id") @db.UnsignedBigInt
+  activityPublished Int      @map("activity_published") @default(1) @db.TinyInt
+  signupResult      Int      @map("signup_result") @default(1) @db.TinyInt
+  beforeTeamUp      Int      @map("before_team_up") @default(1) @db.TinyInt
+  activityCancelled Int      @map("activity_cancelled") @default(1) @db.TinyInt
+  updatedAt         DateTime @map("updated_at") @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("notification_preferences")
+}
+
+model SiteSetting {
+  key       String   @id @map("setting_key") @db.VarChar(64)
+  jsonValue Json     @map("json_value")
+  updatedBy BigInt?  @map("updated_by") @db.UnsignedBigInt
+  createdAt DateTime @map("created_at") @default(now())
+  updatedAt DateTime @map("updated_at") @updatedAt
+
+  @@map("site_settings")
+}
