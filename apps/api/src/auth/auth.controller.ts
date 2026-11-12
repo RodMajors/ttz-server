@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Inject, Param, Patch, Post, Req, Res } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Inject, Param, Patch, Post, Put, Req, Res } from "@nestjs/common";
 import {
   type MemberProfileInput,
   memberProfileSchema,
@@ -45,6 +45,15 @@ export class AuthController {
   @AllowUnapproved()
   @Patch("profile")
   profile(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(memberProfileSchema)) body: MemberProfileInput) {
+    return this.auth.updateProfile(user, body);
+  }
+
+  @AllowUnapproved()
+  @Put("profile")
+  profileFromMiniapp(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(memberProfileSchema)) body: MemberProfileInput,
+  ) {
     return this.auth.updateProfile(user, body);
   }
 

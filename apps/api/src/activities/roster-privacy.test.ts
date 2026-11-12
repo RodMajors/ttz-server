@@ -11,8 +11,21 @@ describe("roster privacy", () => {
       },
     };
     const service = new ActivitiesService(prisma as unknown as PrismaService);
-    const result = await service.roster(1n, { id: 4n, name: "Member", privilege, isApproved: true, status: 1 });
+    const result = await service.roster(1n, member(privilege));
     expect(result.entries[0]?.officerNote).toBe(privilege ? "private" : undefined);
     expect(result.entries[0]?.decisionReason).toBe(privilege ? "private reason" : undefined);
   });
 });
+
+function member(privilege: 0 | 1 | 2) {
+  return {
+    id: 4n,
+    name: "Member",
+    wxNickname: "Member",
+    guildNickname: "Member",
+    privilege,
+    isApproved: true,
+    profileComplete: true,
+    status: 1,
+  };
+}

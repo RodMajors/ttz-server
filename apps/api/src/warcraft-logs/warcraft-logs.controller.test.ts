@@ -17,7 +17,7 @@ describe("WCL attendance confirmation", () => {
       $transaction: vi.fn(async (fn: (tx: typeof transaction) => unknown) => fn(transaction)),
     };
     const controller = new WarcraftLogsController(prisma as unknown as PrismaService, {} as WclQueueService);
-    await controller.mapActors({ id: 3n, name: "Leader", privilege: 0, isApproved: true, status: 1 }, "1", {
+    await controller.mapActors(member(), "1", {
       mappings: [{ actorId: "7", characterId: "5", ignored: false }],
     });
     expect(create).toHaveBeenCalledWith({ data: { reportId: 1n, userId: 6n, characterId: 5n, status: 1 } });
@@ -35,11 +35,7 @@ describe("WCL attendance confirmation", () => {
       $transaction: vi.fn(async (fn: (tx: typeof transaction) => unknown) => fn(transaction)),
     };
     const controller = new WarcraftLogsController(prisma as unknown as PrismaService, {} as WclQueueService);
-    const request = controller.applySuggestions(
-      { id: 3n, name: "Leader", privilege: 0, isApproved: true, status: 1 },
-      "1",
-      { statuses: [{ userId: "6", status: "PRESENT" }] },
-    );
+    const request = controller.applySuggestions(member(), "1", { statuses: [{ userId: "6", status: "PRESENT" }] });
     if (manuallyConfirmed) {
       await expect(request).rejects.toMatchObject({ response: { code: "MANUAL_ATTENDANCE_PROTECTED" } });
       expect(update).not.toHaveBeenCalled();
@@ -54,3 +50,16 @@ describe("WCL attendance confirmation", () => {
     }
   });
 });
+
+function member() {
+  return {
+    id: 3n,
+    name: "Leader",
+    wxNickname: "Leader",
+    guildNickname: "Leader",
+    privilege: 0 as const,
+    isApproved: true,
+    profileComplete: true,
+    status: 1,
+  };
+}

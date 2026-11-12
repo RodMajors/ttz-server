@@ -1,8 +1,11 @@
 export interface AuthUser {
   id: bigint;
   name: string;
+  wxNickname: string | null;
+  guildNickname: string | null;
   privilege: 0 | 1 | 2;
   isApproved: boolean;
+  profileComplete: boolean;
   status: number;
 }
 

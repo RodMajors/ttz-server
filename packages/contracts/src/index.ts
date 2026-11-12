@@ -26,6 +26,28 @@ export type MemberProfileInput = z.infer<typeof memberProfileSchema>;
 
 export const refreshTokenSchema = z.object({ refreshToken: z.string().trim().min(32).max(256) });
 export const qrSessionProofSchema = z.object({ nonce: z.string().trim().min(32).max(256) });
+export const authUserSchema = z.object({
+  id: idSchema,
+  name: z.string(),
+  wxNickname: z.string().nullable(),
+  guildNickname: z.string().nullable(),
+  privilege: privilegeSchema,
+  isApproved: z.boolean(),
+  profileComplete: z.boolean(),
+  status: z.number().int(),
+});
+export type AuthUserDto = z.infer<typeof authUserSchema>;
+
+export const qrSessionSchema = z.object({
+  loginNo: z.string(),
+  nonce: z.string(),
+  browserSecret: z.string(),
+  expiresAt: isoDateTimeSchema,
+  miniappPath: z.string(),
+});
+export const qrSessionStatusSchema = z.object({
+  status: z.enum(["PENDING", "SCANNED", "CONFIRMED", "EXPIRED", "CANCELLED"]),
+});
 
 export const attendanceStatusSchema = z.enum([
   "UNKNOWN",

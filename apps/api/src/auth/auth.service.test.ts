@@ -119,7 +119,16 @@ describe("AuthService QR session state machine", () => {
 });
 
 function member() {
-  return { id: 7n, name: "Member", privilege: 0 as const, isApproved: true, status: 1 };
+  return {
+    id: 7n,
+    name: "Member",
+    wxNickname: "微信成员",
+    guildNickname: "公会成员",
+    privilege: 0 as const,
+    isApproved: true,
+    profileComplete: true,
+    status: 1,
+  };
 }
 
 function createService(prisma: Record<string, unknown>) {

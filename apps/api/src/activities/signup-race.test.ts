@@ -18,7 +18,16 @@ describe("signup concurrent confirmation", () => {
     };
     const service = new ActivitiesService(prisma as unknown as PrismaService);
     await expect(
-      service.cancelSignup(1n, { id: 2n, name: "Member", privilege: 0, isApproved: true, status: 1 }),
+      service.cancelSignup(1n, {
+        id: 2n,
+        name: "Member",
+        wxNickname: "Member",
+        guildNickname: "Member",
+        privilege: 0,
+        isApproved: true,
+        profileComplete: true,
+        status: 1,
+      }),
     ).rejects.toMatchObject({ response: { code: "SIGNUP_CHANGE_LOCKED" } });
     expect(updateMany).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -81,8 +81,11 @@ function toAuthUser(user: {
   return {
     id: user.id,
     name: user.name ?? user.guildNickname ?? user.wxNickname ?? "TTZ 成员",
+    wxNickname: user.wxNickname,
+    guildNickname: user.guildNickname,
     privilege: user.privilege as 0 | 1 | 2,
     isApproved: user.isApproved === 1,
+    profileComplete: Boolean(user.wxNickname && user.guildNickname),
     status: user.status,
   };
 }
