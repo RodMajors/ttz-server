@@ -244,26 +244,50 @@ export class ActivitiesService {
       throw new ForbiddenException({ code: "CHARACTER_NOT_OWNED", message: "备选角色必须属于当前成员" });
     }
     return this.prisma.$transaction(async (transaction) => {
-      const signup = await transaction.activitySignup.upsert({
-        where: { activityId_userId: { activityId: id, userId: user.id } },
-        create: {
-          activityId: id,
-          userId: user.id,
-          characterId,
-          preferredRole: input.preferredRole ? roleToCode[input.preferredRole] : null,
-          preferredSpecId: input.preferredSpecId,
-          note: input.note,
-        },
-        update: {
-          characterId,
-          preferredRole: input.preferredRole ? roleToCode[input.preferredRole] : null,
-          preferredSpecId: input.preferredSpecId,
-          note: input.note,
-          status: 0,
-          signedUpAt: new Date(),
-          cancelledAt: null,
-        },
+      const open = await transaction.activity.updateMany({
+        where: { id, status: 1, isDeleted: 0, rosterLockedAt: null, signupDeadline: { gt: new Date() } },
+        data: { version: { increment: 1 } },
       });
+      if (!open.count) {
+        throw new ConflictException({ code: "SIGNUP_CLOSED", message: "报名已截止或名单已锁定" });
+      }
+      let signup: NonNullable<typeof existing>;
+      if (existing) {
+        const result = await transaction.activitySignup.updateMany({
+          where: {
+            id: existing.id,
+            status: { not: signupStatusToCode.CONFIRMED },
+            activity: { status: 1, isDeleted: 0, rosterLockedAt: null, signupDeadline: { gt: new Date() } },
+          },
+          data: {
+            characterId,
+            preferredRole: input.preferredRole ? roleToCode[input.preferredRole] : null,
+            preferredSpecId: input.preferredSpecId,
+            note: input.note,
+            status: 0,
+            signedUpAt: new Date(),
+            cancelledAt: null,
+          },
+        });
+        if (!result.count) {
+          throw new ConflictException({
+            code: "SIGNUP_CHANGE_LOCKED",
+            message: "报名已确认或报名已截止，不能自行修改",
+          });
+        }
+        signup = await transaction.activitySignup.findUniqueOrThrow({ where: { id: existing.id } });
+      } else {
+        signup = await transaction.activitySignup.create({
+          data: {
+            activityId: id,
+            userId: user.id,
+            characterId,
+            preferredRole: input.preferredRole ? roleToCode[input.preferredRole] : null,
+            preferredSpecId: input.preferredSpecId,
+            note: input.note,
+          },
+        });
+      }
       await transaction.activitySignupChoice.deleteMany({ where: { signupId: signup.id } });
       if (input.choices.length) {
         await transaction.activitySignupChoice.createMany({
@@ -295,10 +319,18 @@ export class ActivitiesService {
       })
     )
       throw new ConflictException({ code: "CONFIRMED_SIGNUP_LOCKED", message: "报名已由团长确认，不能自行取消" });
-    return this.prisma.activitySignup.update({
-      where: { id: signup.id },
+    const result = await this.prisma.activitySignup.updateMany({
+      where: {
+        id: signup.id,
+        status: { not: signupStatusToCode.CONFIRMED },
+        activity: { status: 1, isDeleted: 0, rosterLockedAt: null, signupDeadline: { gt: new Date() } },
+      },
       data: { status: signupStatusToCode.CANCELLED, cancelledAt: new Date() },
     });
+    if (!result.count) {
+      throw new ConflictException({ code: "SIGNUP_CHANGE_LOCKED", message: "报名已确认或报名已截止，不能自行取消" });
+    }
+    return { cancelled: true };
   }
 
   async decide(
