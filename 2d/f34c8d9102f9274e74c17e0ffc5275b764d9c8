@@ -1,0 +1,46 @@
+README.md
+  h_745ff005454789 26-27
+apps/api/package.json
+  h_745ff005454789 29
+apps/api/src/app.module.ts
+  h_745ff005454789 10,31
+apps/api/src/auth/approved-member.guard.ts
+  h_745ff005454789 3,8,10,13-14,16
+apps/api/src/auth/auth.controller.ts
+  h_745ff005454789 1-14,18-39,44-113
+apps/api/src/auth/auth.decorators.ts
+  h_745ff005454789 7-9
+apps/api/src/auth/auth.module.ts
+  h_745ff005454789 3,5
+apps/api/src/auth/auth.service.test.ts
+  h_745ff005454789 1-64
+apps/api/src/auth/auth.service.ts
+  h_745ff005454789 1-244
+apps/api/src/auth/auth.types.ts
+  h_745ff005454789 6,11,13-14
+apps/api/src/auth/session-auth.guard.ts
+  h_745ff005454789 1-92
+packages/config/src/index.ts
+  h_745ff005454789 13-19
+packages/contracts/src/index.ts
+  h_745ff005454789 13-29
+packages/database/prisma/migrations/20261112234500_auth_sessions/migration.sql
+  h_745ff005454789 1-41
+packages/database/prisma/migrations/migration_lock.toml
+  h_745ff005454789 1
+packages/database/prisma/schema.prisma
+  h_745ff005454789 28,32,40-81
+pnpm-lock.yaml
+  h_745ff005454789 224-226,809-811,815-817,824-832,836-847,2091-2095,2101-2104,2109-2123,2128-2140
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2df34c8d9102f9274e74c17e0ffc5275b764d9c8",
+  "prompts": {},
+  "humans": {
+    "h_745ff005454789": {
+      "author": "RodMajors <pro-vana@outlook.com>"
+    }
+  }
+}
