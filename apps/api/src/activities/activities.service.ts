@@ -378,9 +378,14 @@ export class ActivitiesService {
       },
       orderBy: [{ groupNo: "asc" }, { orderIndex: "asc" }],
     });
+    const canManage = activity.creator === user.id || user.privilege >= 1;
     return {
-      entries,
-      canManage: activity.creator === user.id || user.privilege >= 1,
+      entries: entries.map((entry) => ({
+        ...entry,
+        officerNote: canManage ? entry.officerNote : undefined,
+        decisionReason: canManage ? entry.decisionReason : undefined,
+      })),
+      canManage,
       version: activity.version,
       lockedAt: activity.rosterLockedAt,
     };
