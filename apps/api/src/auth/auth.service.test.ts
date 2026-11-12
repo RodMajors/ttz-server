@@ -60,6 +60,7 @@ describe("AuthService QR session state machine", () => {
   it("consumes a confirmed browser session once and creates a web session", async () => {
     const updateMany = vi.fn().mockResolvedValue({ count: 1 });
     const authSessionCreate = vi.fn().mockImplementation(({ data }) => ({ id: 33n, ...data }));
+    const transaction = { loginSession: { updateMany }, authSession: { create: authSessionCreate } };
     const service = createService({
       loginSession: {
         findFirst: vi.fn().mockResolvedValue({
@@ -69,16 +70,15 @@ describe("AuthService QR session state machine", () => {
           expireAt: new Date(Date.now() + 60_000),
           consumedAt: null,
         }),
-        updateMany,
       },
-      authSession: { create: authSessionCreate },
+      $transaction: vi.fn(async (fn: (tx: typeof transaction) => unknown) => fn(transaction)),
     });
 
     const result = await service.pollQr("login-no", "a".repeat(43));
 
     expect(result.status).toBe("CONFIRMED");
     expect(updateMany).toHaveBeenCalledWith({
-      where: { id: 11n, status: 2, consumedAt: null, expireAt: { gt: expect.any(Date) } },
+      where: { id: 11n, status: 2, consumedAt: null, expireAt: { gt: expect.any(Date) }, user: { status: 1 } },
       data: { consumedAt: expect.any(Date) },
     });
     expect(authSessionCreate).toHaveBeenCalledOnce();
@@ -95,6 +95,10 @@ describe("AuthService QR session state machine", () => {
 
   it("does not issue a session when the QR code expires during consumption", async () => {
     const authSessionCreate = vi.fn();
+    const transaction = {
+      loginSession: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      authSession: { create: authSessionCreate },
+    };
     const service = createService({
       loginSession: {
         findFirst: vi.fn().mockResolvedValue({
@@ -104,9 +108,8 @@ describe("AuthService QR session state machine", () => {
           expireAt: new Date(Date.now() + 1000),
           consumedAt: null,
         }),
-        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
       },
-      authSession: { create: authSessionCreate },
+      $transaction: vi.fn(async (fn: (tx: typeof transaction) => unknown) => fn(transaction)),
     });
     await expect(service.pollQr("login-no", "a".repeat(43))).rejects.toMatchObject({
       response: { code: "QR_SESSION_INVALID" },

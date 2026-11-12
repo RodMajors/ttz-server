@@ -161,12 +161,23 @@ export class AuthService {
     if (login.status === 3) return { status: "EXPIRED" as const };
     if (login.status === 4) return { status: "CANCELLED" as const };
     if (!login.userId || login.consumedAt) throw invalidQrSession();
-    const consumed = await this.prisma.loginSession.updateMany({
-      where: { id: login.id, status: 2, consumedAt: null, expireAt: { gt: new Date() } },
-      data: { consumedAt: new Date() },
+    const userId = login.userId;
+    const accessToken = token();
+    const accessExpiresAt = addSeconds(sessionTtl());
+    const session = await this.prisma.$transaction(async (transaction) => {
+      const consumed = await transaction.loginSession.updateMany({
+        where: { id: login.id, status: 2, consumedAt: null, expireAt: { gt: new Date() }, user: { status: 1 } },
+        data: { consumedAt: new Date() },
+      });
+      if (!consumed.count) throw invalidQrSession();
+      return transaction.authSession.create({
+        data: { userId, accessTokenHash: hash(accessToken), kind: 0, accessExpiresAt },
+      });
     });
-    if (!consumed.count) throw invalidQrSession();
-    return { status: "CONFIRMED" as const, session: await this.issueSession(login.userId, 0, false) };
+    return {
+      status: "CONFIRMED" as const,
+      session: { sessionId: session.id.toString(), accessToken, accessExpiresAt: accessExpiresAt.toISOString() },
+    };
   }
 
   private async issueSession(userId: bigint, kind: number, withRefresh: boolean) {
