@@ -174,36 +174,23 @@ export class WarcraftLogsController {
           where: { reportId_userId: { reportId: report.id, userId: item.userId } },
         });
         if (!suggestion) continue;
-        const existingAttendance = await transaction.attendanceRecord.findUnique({
-          where: { activityId_userId: { activityId: report.activityId, userId: item.userId } },
-          select: { manuallyConfirmed: true },
-        });
-        if (existingAttendance?.manuallyConfirmed) {
-          throw new ConflictException({
-            code: "MANUAL_ATTENDANCE_PROTECTED",
-            message: "WCL 建议不能覆盖负责人已经确认的人工出勤",
-          });
-        }
-        await transaction.attendanceRecord.upsert({
-          where: { activityId_userId: { activityId: report.activityId, userId: item.userId } },
-          create: {
-            activityId: report.activityId,
-            userId: item.userId,
+        const result = await transaction.attendanceRecord.updateMany({
+          where: { activityId: report.activityId, userId: item.userId, manuallyConfirmed: false },
+          data: {
             characterId: suggestion.characterId,
             wclReportId: report.id,
             status: attendanceStatusToCode[item.status],
             source: 1,
             recordedBy: user.id,
-          },
-          update: {
-            characterId: suggestion.characterId,
-            wclReportId: report.id,
-            status: attendanceStatusToCode[item.status],
-            source: 2,
-            recordedBy: user.id,
             recordedAt: new Date(),
           },
         });
+        if (!result.count) {
+          throw new ConflictException({
+            code: "MANUAL_ATTENDANCE_PROTECTED",
+            message: "出勤记录不存在或已由负责人确认，不能应用 WCL 建议",
+          });
+        }
         await transaction.wclAttendanceSuggestion.update({
           where: { id: suggestion.id },
           data: { appliedAt: new Date(), appliedBy: user.id, status: attendanceStatusToCode[item.status] },

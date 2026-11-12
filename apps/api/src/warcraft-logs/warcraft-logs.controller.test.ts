@@ -24,11 +24,11 @@ describe("WCL attendance confirmation", () => {
   });
 
   it.each([false, true])("protects manually confirmed records: %s", async (manuallyConfirmed) => {
-    const upsert = vi.fn().mockResolvedValue({});
+    const updateAttendance = vi.fn().mockResolvedValue({ count: manuallyConfirmed ? 0 : 1 });
     const update = vi.fn().mockResolvedValue({});
     const transaction = {
       wclAttendanceSuggestion: { findUnique: vi.fn().mockResolvedValue({ id: 4n, characterId: 5n }), update },
-      attendanceRecord: { findUnique: vi.fn().mockResolvedValue({ manuallyConfirmed }), upsert },
+      attendanceRecord: { updateMany: updateAttendance },
     };
     const prisma = {
       wclReport: { findUnique: vi.fn().mockResolvedValue({ id: 1n, activityId: 2n, activity: { creator: 3n } }) },
@@ -42,10 +42,14 @@ describe("WCL attendance confirmation", () => {
     );
     if (manuallyConfirmed) {
       await expect(request).rejects.toMatchObject({ response: { code: "MANUAL_ATTENDANCE_PROTECTED" } });
-      expect(upsert).not.toHaveBeenCalled();
+      expect(update).not.toHaveBeenCalled();
     } else {
       await expect(request).resolves.toEqual({ applied: 1 });
-      expect(upsert).toHaveBeenCalledOnce();
+      expect(updateAttendance).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { activityId: 2n, userId: 6n, manuallyConfirmed: false },
+        }),
+      );
       expect(update).toHaveBeenCalledOnce();
     }
   });
