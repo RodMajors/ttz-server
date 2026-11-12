@@ -4,6 +4,95 @@ import { WarcraftLogsController } from "./warcraft-logs.controller";
 import type { WclQueueService } from "./wcl-queue.service";
 
 describe("WCL attendance confirmation", () => {
+  it("lists reports only for the activity owner", async () => {
+    const prisma = {
+      activity: { findFirst: vi.fn().mockResolvedValue({ id: 2n, creator: 3n, isDeleted: 0 }) },
+      wclReport: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: 9n,
+            reportCode: "AbCdEf123",
+            status: 2,
+            importedAt: new Date("2026-11-13T00:00:00.000Z"),
+            errorMessage: null,
+            createdAt: new Date("2026-11-12T00:00:00.000Z"),
+          },
+        ]),
+      },
+    };
+    const controller = new WarcraftLogsController(prisma as unknown as PrismaService, {} as WclQueueService);
+
+    await expect(controller.list(member(), "2")).resolves.toEqual([
+      {
+        id: "9",
+        reportCode: "AbCdEf123",
+        status: 2,
+        importedAt: "2026-11-13T00:00:00.000Z",
+        errorMessage: null,
+        createdAt: "2026-11-12T00:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("serializes actor mappings and attendance suggestions", async () => {
+    const prisma = {
+      wclReport: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 1n,
+          activityId: 2n,
+          reportCode: "AbCdEf123",
+          region: "CN",
+          serverId: 569,
+          status: 2,
+          importedAt: new Date("2026-11-13T00:00:00.000Z"),
+          errorMessage: null,
+          createdAt: new Date("2026-11-12T00:00:00.000Z"),
+          summaryJson: { fightCount: 10 },
+          activity: { creator: 3n },
+          actors: [
+            {
+              actorId: 7n,
+              actorName: "Actor",
+              realmName: "伊森利恩",
+              characterId: 5n,
+              matchStatus: 1,
+              character: { id: 5n, name: "Actor", realm: "伊森利恩", userId: 6n },
+            },
+          ],
+          suggestions: [
+            {
+              userId: 6n,
+              characterId: 5n,
+              status: 1,
+              appliedAt: null,
+              user: { id: 6n, name: "Member", guildNickname: null },
+            },
+          ],
+        }),
+      },
+    };
+    const controller = new WarcraftLogsController(prisma as unknown as PrismaService, {} as WclQueueService);
+
+    const result = await controller.get(member(), "1");
+
+    expect(result.summary).toEqual({ fightCount: 10 });
+    expect(result.actors[0]).toEqual({
+      actorId: "7",
+      actorName: "Actor",
+      realmName: "伊森利恩",
+      characterId: "5",
+      matchStatus: 1,
+      character: { id: "5", name: "Actor", realm: "伊森利恩" },
+    });
+    expect(result.suggestions[0]).toEqual({
+      userId: "6",
+      memberName: "Member",
+      characterId: "5",
+      status: "PRESENT",
+      appliedAt: null,
+    });
+  });
+
   it("creates a suggestion when a leader manually matches an actor", async () => {
     const create = vi.fn().mockResolvedValue({});
     const transaction = {

@@ -320,6 +320,14 @@ export const attendanceSummarySchema = z.object({
   effectiveCount: z.number().int().nonnegative(),
   rate: z.number().min(0).max(1),
   counts: z.record(attendanceStatusSchema, z.number().int().nonnegative()),
+  activities: z.array(
+    z.object({
+      id: idSchema,
+      name: z.string(),
+      beginAt: isoDateTimeSchema,
+      status: attendanceStatusSchema,
+    }),
+  ),
 });
 export type AttendanceSummary = z.infer<typeof attendanceSummarySchema>;
 
@@ -333,8 +341,10 @@ export const attendanceRecordListSchema = z.object({
   activityId: idSchema,
   activityName: z.string(),
   beginAt: isoDateTimeSchema,
+  canManage: z.boolean(),
   records: z.array(
     z.object({
+      id: idSchema,
       userId: idSchema,
       memberName: z.string(),
       guildNickname: z.string().nullable(),
@@ -346,6 +356,7 @@ export const attendanceRecordListSchema = z.object({
     }),
   ),
 });
+export type AttendanceRecordList = z.infer<typeof attendanceRecordListSchema>;
 
 export const registerWclReportSchema = z.object({
   reportCode: z
@@ -378,6 +389,42 @@ export const applyWclSuggestionsSchema = z.object({
     .min(1)
     .max(100),
 });
+
+export const wclReportSummarySchema = z.object({
+  id: idSchema,
+  reportCode: z.string(),
+  status: z.number().int().min(0).max(3),
+  importedAt: isoDateTimeSchema.nullable(),
+  errorMessage: z.string().nullable(),
+  createdAt: isoDateTimeSchema,
+});
+export const wclReportListSchema = z.array(wclReportSummarySchema);
+export const wclReportDetailSchema = wclReportSummarySchema.extend({
+  activityId: idSchema,
+  region: z.literal("CN"),
+  serverId: z.literal(569),
+  summary: z.record(z.string(), z.unknown()).nullable(),
+  actors: z.array(
+    z.object({
+      actorId: idSchema,
+      actorName: z.string(),
+      realmName: z.string().nullable(),
+      characterId: idSchema.nullable(),
+      matchStatus: z.number().int().min(0).max(2),
+      character: z.object({ id: idSchema, name: z.string(), realm: z.string() }).nullable(),
+    }),
+  ),
+  suggestions: z.array(
+    z.object({
+      userId: idSchema,
+      memberName: z.string(),
+      characterId: idSchema.nullable(),
+      status: attendanceStatusSchema,
+      appliedAt: isoDateTimeSchema.nullable(),
+    }),
+  ),
+});
+export type WclReportDetail = z.infer<typeof wclReportDetailSchema>;
 
 export const siteSettingKeySchema = z.enum(["guild_profile", "recruitment", "contact", "tool_links"]);
 export const siteSettingSchema = z.object({ key: siteSettingKeySchema, value: z.record(z.string(), z.unknown()) });

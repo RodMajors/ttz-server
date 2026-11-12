@@ -6,7 +6,7 @@ import {
   registerWclReportSchema,
   wclActorMappingSchema,
 } from "@ttz/contracts";
-import { attendanceStatusToCode } from "../activities/activity.constants";
+import { attendanceCodeToStatus, attendanceStatusToCode } from "../activities/activity.constants";
 import { CurrentUser } from "../auth/auth.decorators";
 import type { AuthUser } from "../auth/auth.types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
@@ -48,6 +48,17 @@ export class WarcraftLogsController {
     return { reportId: report.id.toString(), ...queued };
   }
 
+  @Get("activities/:id/wcl-reports")
+  async list(@CurrentUser() user: AuthUser, @Param("id", new ZodValidationPipe(idSchema)) id: string) {
+    const activityId = BigInt(id);
+    const activity = await this.prisma.activity.findFirst({ where: { id: activityId, isDeleted: 0 } });
+    if (!activity || (activity.creator !== user.id && user.privilege < 1)) {
+      throw new NotFoundException({ code: "ACTIVITY_NOT_FOUND", message: "活动不存在" });
+    }
+    const reports = await this.prisma.wclReport.findMany({ where: { activityId }, orderBy: { createdAt: "desc" } });
+    return reports.map((report) => serializeReportSummary(report));
+  }
+
   @Get("wcl-reports/:id")
   async get(@CurrentUser() user: AuthUser, @Param("id", new ZodValidationPipe(idSchema)) id: string) {
     const report = await this.prisma.wclReport.findUnique({
@@ -63,33 +74,27 @@ export class WarcraftLogsController {
       throw new NotFoundException({ code: "WCL_REPORT_NOT_FOUND", message: "WCL 报告不存在" });
     }
     return {
-      ...report,
-      id: report.id.toString(),
+      ...serializeReportSummary(report),
       activityId: report.activityId.toString(),
-      createdBy: report.createdBy.toString(),
-      activity: undefined,
+      region: report.region,
+      serverId: report.serverId,
+      summary: isRecord(report.summaryJson) ? report.summaryJson : null,
       actors: report.actors.map((actor) => ({
-        ...actor,
-        id: actor.id.toString(),
-        reportId: actor.reportId.toString(),
         actorId: actor.actorId.toString(),
+        actorName: actor.actorName,
+        realmName: actor.realmName,
         characterId: actor.characterId?.toString() ?? null,
-        matchedBy: actor.matchedBy?.toString() ?? null,
+        matchStatus: actor.matchStatus,
         character: actor.character
           ? { id: actor.character.id.toString(), name: actor.character.name, realm: actor.character.realm }
           : null,
       })),
       suggestions: report.suggestions.map((suggestion) => ({
-        ...suggestion,
-        id: suggestion.id.toString(),
-        reportId: suggestion.reportId.toString(),
         userId: suggestion.userId.toString(),
+        memberName: suggestion.user.name ?? suggestion.user.guildNickname ?? "TTZ 成员",
         characterId: suggestion.characterId?.toString() ?? null,
-        appliedBy: suggestion.appliedBy?.toString() ?? null,
-        user: {
-          id: suggestion.user.id.toString(),
-          name: suggestion.user.name ?? suggestion.user.guildNickname ?? "TTZ 成员",
-        },
+        status: attendanceCodeToStatus[suggestion.status] ?? "UNKNOWN",
+        appliedAt: suggestion.appliedAt?.toISOString() ?? null,
       })),
     };
   }
@@ -210,4 +215,26 @@ export class WarcraftLogsController {
     }
     return report;
   }
+}
+
+function serializeReportSummary(report: {
+  id: bigint;
+  reportCode: string;
+  status: number;
+  importedAt: Date | null;
+  errorMessage: string | null;
+  createdAt: Date;
+}) {
+  return {
+    id: report.id.toString(),
+    reportCode: report.reportCode,
+    status: report.status,
+    importedAt: report.importedAt?.toISOString() ?? null,
+    errorMessage: report.errorMessage,
+    createdAt: report.createdAt.toISOString(),
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
