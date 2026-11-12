@@ -1,12 +1,15 @@
-import { Body, Controller, Delete, Get, Inject, Param, Post, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Put, Query } from "@nestjs/common";
 import {
   type CreateActivityInput,
   createActivitySchema,
   idSchema,
   pageQuerySchema,
+  rosterUpdateSchema,
   type SignupInput,
   signupDecisionSchema,
   signupSchema,
+  type UpdateActivityInput,
+  updateActivitySchema,
 } from "@ttz/contracts";
 import { CurrentUser } from "../auth/auth.decorators";
 import type { AuthUser } from "../auth/auth.types";
@@ -35,6 +38,15 @@ export class ActivitiesController {
     return this.activities.create(body, user);
   }
 
+  @Patch(":id")
+  update(
+    @CurrentUser() user: AuthUser,
+    @Param("id", new ZodValidationPipe(idSchema)) id: string,
+    @Body(new ZodValidationPipe(updateActivitySchema)) body: UpdateActivityInput,
+  ) {
+    return this.activities.update(BigInt(id), body, user);
+  }
+
   @Post(":id/publish")
   publish(@CurrentUser() user: AuthUser, @Param("id", new ZodValidationPipe(idSchema)) id: string) {
     return this.activities.transition(BigInt(id), "publish", user);
@@ -43,6 +55,11 @@ export class ActivitiesController {
   @Post(":id/cancel")
   cancel(@CurrentUser() user: AuthUser, @Param("id", new ZodValidationPipe(idSchema)) id: string) {
     return this.activities.transition(BigInt(id), "cancel", user);
+  }
+
+  @Post(":id/close-signup")
+  closeSignup(@CurrentUser() user: AuthUser, @Param("id", new ZodValidationPipe(idSchema)) id: string) {
+    return this.activities.closeSignup(BigInt(id), user);
   }
 
   @Post(":id/finish")
@@ -83,5 +100,24 @@ export class ActivitiesController {
   @Post(":id/roster/lock")
   lockRoster(@CurrentUser() user: AuthUser, @Param("id", new ZodValidationPipe(idSchema)) id: string) {
     return this.activities.lockRoster(BigInt(id), user);
+  }
+
+  @Post(":id/roster/unlock")
+  unlockRoster(@CurrentUser() user: AuthUser, @Param("id", new ZodValidationPipe(idSchema)) id: string) {
+    return this.activities.unlockRoster(BigInt(id), user);
+  }
+
+  @Get(":id/roster")
+  roster(@CurrentUser() user: AuthUser, @Param("id", new ZodValidationPipe(idSchema)) id: string) {
+    return this.activities.roster(BigInt(id), user);
+  }
+
+  @Put(":id/roster")
+  updateRoster(
+    @CurrentUser() user: AuthUser,
+    @Param("id", new ZodValidationPipe(idSchema)) id: string,
+    @Body(new ZodValidationPipe(rosterUpdateSchema)) body: Parameters<ActivitiesService["updateRoster"]>[1],
+  ) {
+    return this.activities.updateRoster(BigInt(id), body, user);
   }
 }

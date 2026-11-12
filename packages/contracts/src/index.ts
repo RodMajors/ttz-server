@@ -146,12 +146,28 @@ export const memberApprovalSchema = z
     }
   });
 
-export const signupSchema = z.object({
-  characterId: idSchema,
-  preferredRole: roleSchema.nullable().optional(),
-  preferredSpecId: z.number().int().positive().nullable().optional(),
-  note: z.string().trim().max(255).nullable().optional(),
-});
+export const signupSchema = z
+  .object({
+    characterId: idSchema,
+    preferredRole: roleSchema.nullable().optional(),
+    preferredSpecId: z.number().int().positive().nullable().optional(),
+    note: z.string().trim().max(255).nullable().optional(),
+    choices: z
+      .array(
+        z.object({
+          characterId: idSchema,
+          specId: z.number().int().positive(),
+        }),
+      )
+      .max(10)
+      .default([]),
+  })
+  .superRefine((value, context) => {
+    const keys = value.choices.map((choice) => [choice.characterId, choice.specId].join(":"));
+    if (new Set(keys).size !== keys.length) {
+      context.addIssue({ code: "custom", path: ["choices"], message: "备选角色和专精不能重复" });
+    }
+  });
 export type SignupInput = z.infer<typeof signupSchema>;
 
 export const signupDecisionSchema = z.object({
@@ -161,6 +177,27 @@ export const signupDecisionSchema = z.object({
   groupNo: z.number().int().min(1).max(8).nullable().optional(),
   orderIndex: z.number().int().min(0).max(100).default(0),
 });
+
+export const rosterEntrySchema = z.object({
+  signupId: idSchema,
+  status: z.enum(["CONFIRMED", "BENCH"]),
+  characterId: idSchema,
+  preferredSpecId: z.number().int().positive().nullable().optional(),
+  preferredRole: roleSchema.nullable().optional(),
+  groupNo: z.number().int().min(1).max(8).nullable().optional(),
+  orderIndex: z.number().int().min(0).max(100),
+});
+export const rosterUpdateSchema = z
+  .object({
+    version: z.number().int().positive(),
+    entries: z.array(rosterEntrySchema).max(100),
+  })
+  .superRefine((value, context) => {
+    const signupIds = value.entries.map((entry) => entry.signupId);
+    if (new Set(signupIds).size !== signupIds.length) {
+      context.addIssue({ code: "custom", path: ["entries"], message: "同一报名不能在名单中重复出现" });
+    }
+  });
 
 export const attendanceRecordInputSchema = z.object({
   userId: idSchema,

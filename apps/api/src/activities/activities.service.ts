@@ -1,5 +1,5 @@
 import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import type { CreateActivityInput, SignupInput } from "@ttz/contracts";
+import type { CreateActivityInput, Role, SignupInput, UpdateActivityInput } from "@ttz/contracts";
 import type { AuthUser } from "../auth/auth.types";
 import { PrismaService } from "../database/prisma.service";
 import { roleToCode, signupStatusToCode } from "./activity.constants";
@@ -19,8 +19,8 @@ export class ActivitiesService {
         orderBy: { beginAt: "desc" },
         include: {
           typeDefinition: true,
-          creatorUser: true,
-          _count: { select: { signups: true } },
+          creatorUser: { select: { name: true, guildNickname: true } },
+          _count: { select: { signups: { where: { status: { in: [0, 1, 2] } } } } },
           signups: { where: { status: 1 }, select: { id: true } },
         },
       }),
@@ -50,12 +50,28 @@ export class ActivitiesService {
       where: { id, isDeleted: 0 },
       include: {
         typeDefinition: true,
-        creatorUser: true,
-        signups: { include: { user: true, character: true }, orderBy: [{ groupNo: "asc" }, { orderIndex: "asc" }] },
+        creatorUser: { select: { id: true, name: true, guildNickname: true } },
+        signups: {
+          include: {
+            user: { select: { id: true, name: true, guildNickname: true } },
+            character: true,
+            choices: { include: { character: true }, orderBy: { priority: "asc" } },
+          },
+          orderBy: [{ groupNo: "asc" }, { orderIndex: "asc" }],
+        },
       },
     });
     if (!activity) throw new NotFoundException({ code: "ACTIVITY_NOT_FOUND", message: "活动不存在" });
-    return { ...activity, canManage: activity.creator === user.id || user.privilege >= 1 };
+    const canManage = activity.creator === user.id || user.privilege >= 1;
+    return {
+      ...activity,
+      canManage,
+      signups: activity.signups.map((signup) => ({
+        ...signup,
+        officerNote: canManage ? signup.officerNote : undefined,
+        decisionReason: canManage ? signup.decisionReason : undefined,
+      })),
+    };
   }
 
   async create(input: CreateActivityInput, user: AuthUser) {
@@ -81,6 +97,45 @@ export class ActivitiesService {
         attendanceEnabled: input.attendanceEnabled ? 1 : 0,
       },
     });
+  }
+
+  async update(id: bigint, input: UpdateActivityInput, user: AuthUser) {
+    const activity = await this.requireManageable(id, user);
+    if (activity.status >= 2) {
+      throw new ConflictException({ code: "ACTIVITY_READ_ONLY", message: "已结束或已取消的活动不能编辑" });
+    }
+    const beginAt = input.beginAt ? new Date(input.beginAt) : activity.beginAt;
+    const durationMinutes = input.durationMinutes ?? activity.durationMinutes;
+    const signupDeadline = input.signupDeadline ? new Date(input.signupDeadline) : activity.signupDeadline;
+    if (!signupDeadline || signupDeadline >= beginAt) {
+      throw new ConflictException({ code: "INVALID_SIGNUP_DEADLINE", message: "报名截止时间必须早于活动开始时间" });
+    }
+    const type = input.type ? await this.prisma.activityType.findUnique({ where: { code: input.type } }) : undefined;
+    if (input.type && !type) {
+      throw new ConflictException({ code: "ACTIVITY_TYPE_NOT_READY", message: "活动类型基础数据尚未配置" });
+    }
+    const result = await this.prisma.activity.updateMany({
+      where: { id, version: input.version, isDeleted: 0 },
+      data: {
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(type ? { type: type.id } : {}),
+        ...(input.description !== undefined ? { description: input.description } : {}),
+        beginAt,
+        teamUpAt: input.teamUpAt ? new Date(input.teamUpAt) : activity.teamUpAt,
+        endAt: new Date(beginAt.getTime() + durationMinutes * 60_000),
+        signupDeadline,
+        durationMinutes,
+        ...(input.maxPlayers !== undefined ? { maxPlayers: input.maxPlayers } : {}),
+        ...(input.tankSlots !== undefined ? { tankSlots: input.tankSlots } : {}),
+        ...(input.healerSlots !== undefined ? { healerSlots: input.healerSlots } : {}),
+        ...(input.meleeSlots !== undefined ? { meleeSlots: input.meleeSlots } : {}),
+        ...(input.rangedSlots !== undefined ? { rangedSlots: input.rangedSlots } : {}),
+        ...(input.attendanceEnabled !== undefined ? { attendanceEnabled: input.attendanceEnabled ? 1 : 0 } : {}),
+        version: { increment: 1 },
+      },
+    });
+    if (!result.count) throw versionConflict();
+    return this.get(id, user);
   }
 
   async transition(id: bigint, target: "publish" | "cancel" | "finish", user: AuthUser) {
@@ -130,25 +185,48 @@ export class ActivitiesService {
     ) {
       throw new ConflictException({ code: "CONFIRMED_SIGNUP_LOCKED", message: "报名已由团长确认，不能自行修改" });
     }
-    return this.prisma.activitySignup.upsert({
-      where: { activityId_userId: { activityId: id, userId: user.id } },
-      create: {
-        activityId: id,
-        userId: user.id,
-        characterId,
-        preferredRole: input.preferredRole ? roleToCode[input.preferredRole] : null,
-        preferredSpecId: input.preferredSpecId,
-        note: input.note,
-      },
-      update: {
-        characterId,
-        preferredRole: input.preferredRole ? roleToCode[input.preferredRole] : null,
-        preferredSpecId: input.preferredSpecId,
-        note: input.note,
-        status: 0,
-        signedUpAt: new Date(),
-        cancelledAt: null,
-      },
+    const choiceIds = input.choices.map((choice) => BigInt(choice.characterId));
+    const ownedChoiceCount = choiceIds.length
+      ? await this.prisma.character.count({
+          where: { id: { in: choiceIds }, userId: user.id, isRetired: 0 },
+        })
+      : 0;
+    if (ownedChoiceCount !== new Set(choiceIds.map(String)).size) {
+      throw new ForbiddenException({ code: "CHARACTER_NOT_OWNED", message: "备选角色必须属于当前成员" });
+    }
+    return this.prisma.$transaction(async (transaction) => {
+      const signup = await transaction.activitySignup.upsert({
+        where: { activityId_userId: { activityId: id, userId: user.id } },
+        create: {
+          activityId: id,
+          userId: user.id,
+          characterId,
+          preferredRole: input.preferredRole ? roleToCode[input.preferredRole] : null,
+          preferredSpecId: input.preferredSpecId,
+          note: input.note,
+        },
+        update: {
+          characterId,
+          preferredRole: input.preferredRole ? roleToCode[input.preferredRole] : null,
+          preferredSpecId: input.preferredSpecId,
+          note: input.note,
+          status: 0,
+          signedUpAt: new Date(),
+          cancelledAt: null,
+        },
+      });
+      await transaction.activitySignupChoice.deleteMany({ where: { signupId: signup.id } });
+      if (input.choices.length) {
+        await transaction.activitySignupChoice.createMany({
+          data: input.choices.map((choice, index) => ({
+            signupId: signup.id,
+            characterId: BigInt(choice.characterId),
+            specId: choice.specId,
+            priority: index + 1,
+          })),
+        });
+      }
+      return signup;
     });
   }
 
@@ -212,6 +290,114 @@ export class ActivitiesService {
     });
   }
 
+  async unlockRoster(id: bigint, user: AuthUser) {
+    await this.requireManageable(id, user);
+    return this.prisma.activity.update({
+      where: { id },
+      data: { rosterLockedAt: null, version: { increment: 1 } },
+    });
+  }
+
+  async closeSignup(id: bigint, user: AuthUser) {
+    const activity = await this.requireManageable(id, user);
+    if (activity.status !== 1) {
+      throw new ConflictException({ code: "INVALID_ACTIVITY_STATE", message: "只有已发布活动可以关闭报名" });
+    }
+    return this.prisma.activity.update({
+      where: { id },
+      data: { signupDeadline: new Date(), version: { increment: 1 } },
+    });
+  }
+
+  async roster(id: bigint, user: AuthUser) {
+    const activity = await this.prisma.activity.findFirst({ where: { id, isDeleted: 0 } });
+    if (!activity) throw new NotFoundException({ code: "ACTIVITY_NOT_FOUND", message: "活动不存在" });
+    const entries = await this.prisma.activitySignup.findMany({
+      where: { activityId: id, status: { in: [1, 2] } },
+      include: {
+        user: { select: { id: true, name: true, guildNickname: true } },
+        character: true,
+      },
+      orderBy: [{ groupNo: "asc" }, { orderIndex: "asc" }],
+    });
+    return {
+      entries,
+      canManage: activity.creator === user.id || user.privilege >= 1,
+      version: activity.version,
+      lockedAt: activity.rosterLockedAt,
+    };
+  }
+
+  async updateRoster(
+    id: bigint,
+    input: {
+      version: number;
+      entries: Array<{
+        signupId: string;
+        status: "CONFIRMED" | "BENCH";
+        characterId: string;
+        preferredSpecId?: number | null;
+        preferredRole?: Role | null;
+        groupNo?: number | null;
+        orderIndex: number;
+      }>;
+    },
+    user: AuthUser,
+  ) {
+    const activity = await this.requireManageable(id, user);
+    if (activity.status >= 2) {
+      throw new ConflictException({ code: "ACTIVITY_READ_ONLY", message: "已结束或已取消的活动不能调整名单" });
+    }
+    const signupIds = input.entries.map((entry) => BigInt(entry.signupId));
+    const signups = signupIds.length
+      ? await this.prisma.activitySignup.findMany({
+          where: { id: { in: signupIds }, activityId: id },
+          select: { id: true, userId: true },
+        })
+      : [];
+    if (signups.length !== new Set(signupIds.map(String)).size) {
+      throw new NotFoundException({ code: "SIGNUP_NOT_FOUND", message: "名单包含无效报名" });
+    }
+    const validCharacterCount = input.entries.length
+      ? await this.prisma.character.count({
+          where: {
+            OR: input.entries.map((entry) => ({
+              id: BigInt(entry.characterId),
+              userId: signups.find((signup) => signup.id === BigInt(entry.signupId))?.userId,
+              isRetired: 0,
+            })),
+          },
+        })
+      : 0;
+    if (validCharacterCount !== input.entries.length) {
+      throw new ForbiddenException({ code: "CHARACTER_NOT_OWNED", message: "名单角色必须属于对应报名成员" });
+    }
+    return this.prisma.$transaction(async (transaction) => {
+      const version = await transaction.activity.updateMany({
+        where: { id, version: input.version },
+        data: { version: { increment: 1 } },
+      });
+      if (!version.count) throw versionConflict();
+      for (const entry of input.entries) {
+        await transaction.activitySignup.update({
+          where: { id: BigInt(entry.signupId) },
+          data: {
+            status: signupStatusToCode[entry.status],
+            characterId: BigInt(entry.characterId),
+            preferredSpecId: entry.preferredSpecId,
+            preferredRole: entry.preferredRole ? roleToCode[entry.preferredRole] : null,
+            groupNo: entry.groupNo,
+            orderIndex: entry.orderIndex,
+            handledBy: user.id,
+            handledAt: new Date(),
+            confirmedAt: entry.status === "CONFIRMED" ? new Date() : null,
+          },
+        });
+      }
+      return { version: input.version + 1, updated: input.entries.length };
+    });
+  }
+
   private async requireOpenSignup(id: bigint) {
     const activity = await this.prisma.activity.findFirst({ where: { id, isDeleted: 0 } });
     if (!activity) throw new NotFoundException({ code: "ACTIVITY_NOT_FOUND", message: "活动不存在" });
@@ -233,4 +419,11 @@ export class ActivitiesService {
       throw new ForbiddenException({ code: "ACTIVITY_NOT_OWNED", message: "只能管理自己创建的活动" });
     return activity;
   }
+}
+
+function versionConflict() {
+  return new ConflictException({
+    code: "VERSION_CONFLICT",
+    message: "活动已被其他人更新，请刷新后重试",
+  });
 }
