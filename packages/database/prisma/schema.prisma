@@ -32,6 +32,7 @@ model User {
   loginSessions          LoginSession[]
   notificationPreference NotificationPreference?
   signups                ActivitySignup[]
+  wclAttendanceSuggestions WclAttendanceSuggestion[]
 
   @@index([isApproved, status], map: "idx_users_approval")
   @@map("users")
@@ -60,7 +61,7 @@ model LoginSession {
   id                BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
   loginNo           String    @map("login_no") @unique(map: "uk_login_session_no") @db.VarChar(64)
   nonceHash         String    @map("nonce_hash") @db.Char(64)
-  browserSecretHash String    @map("browser_secret_hash") @db.Char(64)
+  browserSecretHash String?   @map("browser_secret_hash") @db.Char(64)
   openid            String?   @db.VarChar(128)
   userId            BigInt?   @map("user_id") @db.UnsignedBigInt
   status            Int       @default(0) @db.TinyInt
@@ -95,6 +96,8 @@ model Character {
   attendanceRecords AttendanceRecord[]
   signups           ActivitySignup[]
   signupChoices     ActivitySignupChoice[]
+  wclAttendanceSuggestions WclAttendanceSuggestion[]
+  wclReportActors   WclReportActor[]
   user              User                   @relation(fields: [userId], references: [id])
 
   @@unique([name, realm], map: "uk_char")
@@ -248,9 +251,30 @@ model WclReport {
   activity          Activity           @relation(fields: [activityId], references: [id])
   actors            WclReportActor[]
   attendanceRecords AttendanceRecord[]
+  suggestions       WclAttendanceSuggestion[]
 
   @@index([activityId, createdAt], map: "idx_wcl_report_activity")
   @@map("wcl_reports")
+}
+
+model WclAttendanceSuggestion {
+  id          BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  reportId    BigInt    @map("report_id") @db.UnsignedBigInt
+  userId      BigInt    @map("user_id") @db.UnsignedBigInt
+  characterId BigInt?   @map("character_id") @db.UnsignedBigInt
+  status      Int       @default(1) @db.TinyInt
+  appliedAt   DateTime? @map("applied_at")
+  appliedBy   BigInt?   @map("applied_by") @db.UnsignedBigInt
+  createdAt   DateTime  @map("created_at") @default(now())
+  updatedAt   DateTime  @map("updated_at") @updatedAt
+
+  report WclReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  character Character? @relation(fields: [characterId], references: [id], onDelete: SetNull)
+  user   User      @relation(fields: [userId], references: [id])
+
+  @@unique([reportId, userId], map: "uk_wcl_suggestion_report_user")
+  @@index([userId, appliedAt], map: "idx_wcl_suggestion_user")
+  @@map("wcl_attendance_suggestions")
 }
 
 model WclReportActor {
@@ -266,7 +290,8 @@ model WclReportActor {
   createdAt   DateTime  @map("created_at") @default(now())
   updatedAt   DateTime  @map("updated_at") @updatedAt
 
-  report WclReport @relation(fields: [reportId], references: [id])
+  report    WclReport @relation(fields: [reportId], references: [id])
+  character Character? @relation(fields: [characterId], references: [id], onDelete: SetNull)
 
   @@unique([reportId, actorId], map: "uk_wcl_report_actor")
   @@map("wcl_report_actors")

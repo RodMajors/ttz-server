@@ -6,6 +6,10 @@ export const envSchema = z.object({
   WEB_ORIGIN: z.string().url().default("http://localhost:3000"),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().url(),
+  REDIS_ENABLED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
   WECHAT_APP_ID: z.string().default(""),
   WECHAT_APP_SECRET: z.string().default(""),
   WCL_CLIENT_ID: z.string().default(""),

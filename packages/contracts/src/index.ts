@@ -134,6 +134,7 @@ export const createCharacterSchema = z.object({
 });
 export type CreateCharacterInput = z.infer<typeof createCharacterSchema>;
 export const updateCharacterSchema = createCharacterSchema.partial();
+export type UpdateCharacterInput = z.infer<typeof updateCharacterSchema>;
 
 export const memberApprovalSchema = z
   .object({
@@ -145,6 +146,25 @@ export const memberApprovalSchema = z
       context.addIssue({ code: "custom", path: ["reason"], message: "拒绝成员申请时必须填写原因" });
     }
   });
+
+export const memberStatusSchema = z.object({ status: z.enum(["ACTIVE", "DISABLED"]) });
+export const memberPrivilegeSchema = z.object({ privilege: privilegeSchema });
+export const memberListQuerySchema = pageQuerySchema.extend({
+  search: z.string().trim().max(100).optional(),
+  groupId: idSchema.optional(),
+});
+
+export const guildGroupInputSchema = z.object({
+  name: z.string().trim().min(1).max(64),
+  code: z
+    .string()
+    .trim()
+    .regex(/^[a-z0-9_-]{2,32}$/),
+  description: z.string().trim().max(255).nullable().optional(),
+  isActive: z.boolean().default(true),
+  sort: z.number().int().min(-1000).max(1000).default(0),
+});
+export const guildGroupMemberSchema = z.object({ userId: idSchema });
 
 export const signupSchema = z
   .object({
@@ -215,11 +235,60 @@ export const attendanceSummarySchema = z.object({
 });
 export type AttendanceSummary = z.infer<typeof attendanceSummarySchema>;
 
+export const attendanceQuerySchema = z.object({
+  memberId: idSchema.optional(),
+  groupId: idSchema.optional(),
+  from: isoDateTimeSchema.optional(),
+  to: isoDateTimeSchema.optional(),
+});
+export const attendanceRecordListSchema = z.object({
+  activityId: idSchema,
+  activityName: z.string(),
+  beginAt: isoDateTimeSchema,
+  records: z.array(
+    z.object({
+      userId: idSchema,
+      memberName: z.string(),
+      guildNickname: z.string().nullable(),
+      characterId: idSchema.nullable(),
+      characterName: z.string().nullable(),
+      realm: z.string().nullable(),
+      status: attendanceStatusSchema,
+      note: z.string().nullable(),
+    }),
+  ),
+});
+
 export const registerWclReportSchema = z.object({
   reportCode: z
     .string()
     .trim()
     .regex(/^[A-Za-z0-9]{8,32}$/),
+});
+
+export const wclActorMappingSchema = z.object({
+  mappings: z
+    .array(
+      z.object({
+        actorId: idSchema,
+        characterId: idSchema.nullable(),
+        ignored: z.boolean().default(false),
+      }),
+    )
+    .min(1)
+    .max(100),
+});
+
+export const applyWclSuggestionsSchema = z.object({
+  statuses: z
+    .array(
+      z.object({
+        userId: idSchema,
+        status: z.enum(["PRESENT", "LATE", "EXCUSED_ABSENCE", "UNEXCUSED_ABSENCE", "BENCH", "NOT_SIGNED_UP"]),
+      }),
+    )
+    .min(1)
+    .max(100),
 });
 
 export const siteSettingKeySchema = z.enum(["guild_profile", "recruitment", "contact", "tool_links"]);

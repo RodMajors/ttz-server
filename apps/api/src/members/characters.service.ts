@@ -1,5 +1,5 @@
 import { ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import type { CreateCharacterInput } from "@ttz/contracts";
+import type { CreateCharacterInput, UpdateCharacterInput } from "@ttz/contracts";
 import { PrismaService } from "../database/prisma.service";
 
 @Injectable()
@@ -23,6 +23,29 @@ export class CharactersService {
           itemLevel: input.itemLevel,
           itemLevelUpdatedAt: input.itemLevel ? new Date() : null,
           isMain: input.isMain ? 1 : 0,
+        },
+      });
+    });
+  }
+
+  async update(userId: bigint, characterId: bigint, input: UpdateCharacterInput) {
+    const character = await this.prisma.character.findUnique({ where: { id: characterId } });
+    if (!character) throw new NotFoundException({ code: "CHARACTER_NOT_FOUND", message: "角色不存在" });
+    if (character.userId !== userId)
+      throw new ForbiddenException({ code: "CHARACTER_NOT_OWNED", message: "不能管理其他成员的角色" });
+    return this.prisma.$transaction(async (transaction) => {
+      if (input.isMain) await transaction.character.updateMany({ where: { userId }, data: { isMain: 0 } });
+      return transaction.character.update({
+        where: { id: characterId },
+        data: {
+          ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.realm !== undefined ? { realm: input.realm } : {}),
+          ...(input.faction !== undefined ? { faction: input.faction } : {}),
+          ...(input.specId !== undefined ? { spec: input.specId } : {}),
+          ...(input.itemLevel !== undefined
+            ? { itemLevel: input.itemLevel, itemLevelUpdatedAt: input.itemLevel === null ? null : new Date() }
+            : {}),
+          ...(input.isMain !== undefined ? { isMain: input.isMain ? 1 : 0 } : {}),
         },
       });
     });

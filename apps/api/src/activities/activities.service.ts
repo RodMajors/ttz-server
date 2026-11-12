@@ -2,7 +2,7 @@ import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundExce
 import type { CreateActivityInput, Role, SignupInput, UpdateActivityInput } from "@ttz/contracts";
 import type { AuthUser } from "../auth/auth.types";
 import { PrismaService } from "../database/prisma.service";
-import { roleToCode, signupStatusToCode } from "./activity.constants";
+import { attendanceStatusToCode, roleToCode, signupStatusToCode } from "./activity.constants";
 import { canMemberChangeSignup } from "./signup-policy";
 
 @Injectable()
@@ -150,14 +150,63 @@ export class ActivitiesService {
         message: "发布前必须设置早于活动开始时间的报名截止时间",
       });
     }
-    return this.prisma.activity.update({
-      where: { id },
-      data:
-        target === "publish"
-          ? { status: 1, publishedAt: now, version: { increment: 1 } }
-          : target === "cancel"
-            ? { status: 3, cancelledAt: now, version: { increment: 1 } }
-            : { status: 2, finishedAt: now, version: { increment: 1 } },
+    if (target !== "finish") {
+      return this.prisma.activity.update({
+        where: { id },
+        data:
+          target === "publish"
+            ? { status: 1, publishedAt: now, version: { increment: 1 } }
+            : { status: 3, cancelledAt: now, version: { increment: 1 } },
+      });
+    }
+    return this.prisma.$transaction(async (transaction) => {
+      const finished = await transaction.activity.update({
+        where: { id },
+        data: { status: 2, finishedAt: now, version: { increment: 1 } },
+        include: { typeDefinition: true },
+      });
+      if (finished.attendanceEnabled !== 1 || finished.typeDefinition.code !== "raid_progress") return finished;
+      const [members, signups] = await Promise.all([
+        transaction.user.findMany({
+          where: { isApproved: 1 },
+          select: {
+            id: true,
+            characters: { where: { isRetired: 0 }, orderBy: { isMain: "desc" }, take: 1 },
+          },
+        }),
+        transaction.activitySignup.findMany({
+          where: { activityId: id, status: { in: [0, 1, 2] } },
+          include: { character: true },
+        }),
+      ]);
+      const signupByUser = new Map(signups.map((signup) => [signup.userId.toString(), signup]));
+      await transaction.attendanceRecord.createMany({
+        data: members.map((member) => {
+          const signup = signupByUser.get(member.id.toString());
+          const isRostered =
+            signup?.status === signupStatusToCode.CONFIRMED || signup?.status === signupStatusToCode.BENCH;
+          const character = isRostered ? signup.character : member.characters[0];
+          return {
+            activityId: id,
+            signupId: isRostered ? signup.id : null,
+            userId: member.id,
+            characterId: character?.id ?? null,
+            characterNameSnapshot: character?.name ?? null,
+            realmSnapshot: character?.realm ?? null,
+            roleSnapshot: isRostered ? signup.preferredRole : null,
+            status:
+              signup?.status === signupStatusToCode.BENCH
+                ? attendanceStatusToCode.BENCH
+                : isRostered
+                  ? attendanceStatusToCode.UNKNOWN
+                  : attendanceStatusToCode.NOT_SIGNED_UP,
+            source: 0,
+            recordedBy: user.id,
+          };
+        }),
+        skipDuplicates: true,
+      });
+      return finished;
     });
   }
 
@@ -267,6 +316,15 @@ export class ActivitiesService {
     await this.requireManageable(id, user);
     const signup = await this.prisma.activitySignup.findFirst({ where: { id: signupId, activityId: id } });
     if (!signup) throw new NotFoundException({ code: "SIGNUP_NOT_FOUND", message: "报名记录不存在" });
+    if (input.status === "CONFIRMED" && signup.status !== signupStatusToCode.CONFIRMED) {
+      const confirmedCount = await this.prisma.activitySignup.count({
+        where: { activityId: id, status: signupStatusToCode.CONFIRMED },
+      });
+      const activity = await this.prisma.activity.findUnique({ where: { id }, select: { maxPlayers: true } });
+      if (activity && confirmedCount >= activity.maxPlayers) {
+        throw new ConflictException({ code: "ROSTER_FULL", message: "正式名单已达到人数上限" });
+      }
+    }
     return this.prisma.activitySignup.update({
       where: { id: signupId },
       data: {
@@ -358,6 +416,9 @@ export class ActivitiesService {
     if (signups.length !== new Set(signupIds.map(String)).size) {
       throw new NotFoundException({ code: "SIGNUP_NOT_FOUND", message: "名单包含无效报名" });
     }
+    if (input.entries.filter((entry) => entry.status === "CONFIRMED").length > activity.maxPlayers) {
+      throw new ConflictException({ code: "ROSTER_FULL", message: "正式名单人数不能超过活动上限" });
+    }
     const validCharacterCount = input.entries.length
       ? await this.prisma.character.count({
           where: {
@@ -378,6 +439,21 @@ export class ActivitiesService {
         data: { version: { increment: 1 } },
       });
       if (!version.count) throw versionConflict();
+      await transaction.activitySignup.updateMany({
+        where: {
+          activityId: id,
+          status: { in: [signupStatusToCode.CONFIRMED, signupStatusToCode.BENCH] },
+          id: { notIn: signupIds.length ? signupIds : [0n] },
+        },
+        data: {
+          status: signupStatusToCode.PENDING,
+          groupNo: null,
+          orderIndex: 0,
+          confirmedAt: null,
+          handledBy: user.id,
+          handledAt: new Date(),
+        },
+      });
       for (const entry of input.entries) {
         await transaction.activitySignup.update({
           where: { id: BigInt(entry.signupId) },

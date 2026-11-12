@@ -22,20 +22,4 @@ CREATE TABLE auth_sessions (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 ALTER TABLE login_session
-  ADD COLUMN nonce_hash CHAR(64) NULL AFTER login_no,
-  ADD COLUMN browser_secret_hash CHAR(64) NULL AFTER nonce_hash,
-  ADD COLUMN user_id BIGINT UNSIGNED NULL AFTER openid,
-  ADD COLUMN scanned_at DATETIME NULL AFTER expire_at,
-  ADD COLUMN confirmed_at DATETIME NULL AFTER scanned_at,
-  ADD COLUMN consumed_at DATETIME NULL AFTER confirmed_at,
-  ADD COLUMN cancelled_at DATETIME NULL AFTER consumed_at,
-  ADD KEY idx_login_session_user (user_id),
-  ADD KEY idx_login_session_status_expiry (status, expire_at),
-  ADD CONSTRAINT fk_login_session_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL;
-
--- Existing QR sessions are ephemeral and cannot be trusted after the nonce upgrade.
-DELETE FROM login_session;
-
-ALTER TABLE login_session
-  MODIFY COLUMN nonce_hash CHAR(64) NOT NULL,
-  MODIFY COLUMN browser_secret_hash CHAR(64) NOT NULL;
+  ADD COLUMN browser_secret_hash CHAR(64) NULL AFTER nonce_hash;
