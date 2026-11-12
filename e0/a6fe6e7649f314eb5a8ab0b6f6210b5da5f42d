@@ -1,0 +1,16 @@
+apps/api/src/activities/activities.service.ts
+  h_745ff005454789 247-249,251-290,322-327,330-333
+apps/api/src/activities/signup-race.test.ts
+  h_745ff005454789 1-32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e0a6fe6e7649f314eb5a8ab0b6f6210b5da5f42d",
+  "prompts": {},
+  "humans": {
+    "h_745ff005454789": {
+      "author": "RodMajors <pro-vana@outlook.com>"
+    }
+  }
+}
