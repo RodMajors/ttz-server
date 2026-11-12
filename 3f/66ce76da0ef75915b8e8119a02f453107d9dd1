@@ -1,0 +1,16 @@
+apps/api/src/activities/activities.service.ts
+  h_745ff005454789 381,383-388
+apps/api/src/activities/roster-privacy.test.ts
+  h_745ff005454789 1-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3f66ce76da0ef75915b8e8119a02f453107d9dd1",
+  "prompts": {},
+  "humans": {
+    "h_745ff005454789": {
+      "author": "RodMajors <pro-vana@outlook.com>"
+    }
+  }
+}
