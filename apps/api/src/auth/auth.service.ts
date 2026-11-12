@@ -50,8 +50,14 @@ export class AuthService {
     const nextRefreshToken = token();
     const accessExpiresAt = addSeconds(ACCESS_TOKEN_TTL_SECONDS);
     const refreshExpiresAt = addSeconds(sessionTtl());
-    await this.prisma.authSession.update({
-      where: { id: session.id },
+    const rotated = await this.prisma.authSession.updateMany({
+      where: {
+        id: session.id,
+        refreshTokenHash: hash(refreshToken),
+        revokedAt: null,
+        refreshExpiresAt: { gt: new Date() },
+        user: { status: 1 },
+      },
       data: {
         accessTokenHash: hash(accessToken),
         refreshTokenHash: hash(nextRefreshToken),
@@ -59,6 +65,9 @@ export class AuthService {
         refreshExpiresAt,
       },
     });
+    if (!rotated.count) {
+      throw new UnauthorizedException({ code: "REFRESH_TOKEN_INVALID", message: "登录已失效，请重新登录" });
+    }
     return {
       accessToken,
       refreshToken: nextRefreshToken,

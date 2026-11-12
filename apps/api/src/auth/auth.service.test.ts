@@ -3,6 +3,36 @@ import type { PrismaService } from "../database/prisma.service";
 import { AuthService, hash } from "./auth.service";
 
 describe("AuthService QR session state machine", () => {
+  it("rejects a refresh token already rotated by another request", async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 0 });
+    const service = createService({
+      authSession: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 1n,
+          revokedAt: null,
+          refreshExpiresAt: new Date(Date.now() + 60000),
+          user: {
+            id: 7n,
+            name: "Member",
+            guildNickname: null,
+            wxNickname: null,
+            privilege: 0,
+            isApproved: 1,
+            status: 1,
+          },
+        }),
+        updateMany,
+      },
+    });
+    await expect(service.refresh("refresh-token")).rejects.toMatchObject({
+      response: { code: "REFRESH_TOKEN_INVALID" },
+    });
+    expect(updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ refreshTokenHash: hash("refresh-token"), revokedAt: null }),
+      }),
+    );
+  });
   it("scans only a pending, unexpired session with the correct nonce", async () => {
     const updateMany = vi.fn().mockResolvedValue({ count: 1 });
     const service = createService({ loginSession: { updateMany } });
