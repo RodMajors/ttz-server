@@ -1,38 +1,107 @@
 # TTZ Server
 
-TTZ 公会站后端仓库。NestJS API、BullMQ worker、Prisma schema 和后端共享 Zod contracts 均在此维护。
+TTZ 公会站后端 Monorepo，维护 NestJS REST API、BullMQ WCL Worker、Prisma schema、环境校验和服务端共享 contracts。前端与小程序位于同级 `ttz` 仓库，需求和设计位于同级 `docs`。
 
-## 目录
+## 目录结构
 
-- apps/api：NestJS REST API、Swagger、微信登录、活动、报名、名单、出勤、WCL 和公开内容。
-- apps/worker：BullMQ 后台任务；生产初始并发为 1。
-- packages/contracts：后端请求 DTO 与枚举的 Zod 单一事实来源。
-- packages/database：Prisma schema 与迁移。
-- packages/config：环境变量校验。
+```text
+ttz-server/
+├─ apps/
+│  ├─ api/                    NestJS API、Swagger、业务模块和 Vitest
+│  └─ worker/                 BullMQ WCL 导入 Worker，并发固定为 1
+├─ packages/
+│  ├─ config/                 @nestjs/config 使用的 Zod 环境变量校验
+│  ├─ contracts/              服务端 DTO 与业务枚举的事实来源
+│  ├─ database/               Prisma schema、client 导出和待评审 migration
+│  └─ warcraft-logs/          WCL OAuth2 / GraphQL 客户端与测试
+├─ .github/workflows/ci.yml  后端 CI
+├─ .husky/pre-commit         格式、类型与单元测试门禁
+└─ turbo.json                build/typecheck/test 任务
+```
 
-前端、小程序位于独立的 ttz 仓库；需求和设计文档位于同级 docs 目录。跨仓接口以 REST + Swagger 为边界，两个仓库中的客户端/服务端 contracts 版本必须在同一功能阶段同步提交。
+## 业务模块
+
+- `auth`：微信 code2Session、可轮换小程序 token、Web HttpOnly Cookie、一次性二维码登录。
+- `members`：审核、停用、privilege、当前身份组、角色和通知偏好。
+- `activities`：活动状态机、报名、审批、名单、锁定和并发版本控制。
+- `attendance`：人工出勤、个人/管理视图和统计。
+- `warcraft-logs`：报告登记、队列、角色匹配、出勤建议和人工记录保护。
+- `announcements`：置顶、定时、到期、全员/当前身份组投放。
+- `public`：公开公会资料、招募、联系方式、工具链接和 WCL 摘要；管理员结构化设置写入。
+
+## 已实现的业务约束
+
+- 正常出勤和迟到计为有效出勤；没有早退状态。请假、缺席、替补和未报名不计入。
+- 普通成员只有在报名截止前、名单未锁定且报名尚未确认时才能修改或取消。负责人/管理员仍可调整。
+- 身份组只保存当前标签，不授予权限，不做活动时快照。
+- 名单不保留变更历史，依靠活动 version 防止并发静默覆盖。
+- 本期不实现站位图和团本准备事项。
+- 人工确认的出勤不会被后续 WCL 建议覆盖。
 
 ## 本地开发
 
-需要 Node.js 26.13.1 与 pnpm 12.18.0。
+要求 Node.js 26.13.1 与 pnpm 12.18.0。
 
-1. 将 .env.example 复制为 .env 并填写本地 MySQL、Redis、微信和 WCL 配置。仅 API 基础开发时保持 REDIS_ENABLED=false；使用 WCL 异步导入时启用 Redis 并运行 worker。
-2. 执行 pnpm install。
-3. 执行 pnpm db:generate。
-4. 执行 pnpm dev。WCL 导入时再设置 REDIS_ENABLED=true 并同时运行 worker。
+```bash
+pnpm install
+pnpm db:generate
+pnpm dev
+```
 
-API 默认监听 http://localhost:3001/api。非生产环境 Swagger 位于 /api/docs。生产环境不公开 Swagger。
+复制 `.env.example` 为 `.env`。主要变量：
 
-生产 API 可先运行 pnpm --filter @ttz/api build，再运行 pnpm --filter @ttz/api start。构建先由 TypeScript 生成 Nest 装饰器元数据，再将工作区源码打包为 Node 可执行产物。启动仍需要实际数据库配置；健康存活检查不证明数据库连接正常。
+- `DATABASE_URL`：MySQL 连接。不要在文档或仓库中提交生产凭证。
+- `REDIS_URL` / `REDIS_ENABLED`：Redis 与 Worker 开关。
+- `WEB_ORIGIN`：唯一允许携带 Cookie 的 Web Origin。
+- `WECHAT_APP_ID` / `WECHAT_APP_SECRET`：微信服务端凭证。
+- `WCL_CLIENT_ID` / `WCL_CLIENT_SECRET`：Warcraft Logs client credentials。
+- `SESSION_COOKIE_NAME`、`SESSION_TTL_SECONDS`、`QR_SESSION_TTL_SECONDS`：会话配置。
+- `ALLOW_DEV_AUTH_HEADER`：仅非生产本地调试；生产代码永远忽略开发身份头。
 
-Web 使用 HttpOnly、SameSite=Strict 的不透明会话 Cookie；小程序使用短期 access token 与可轮换 refresh token。数据库只保存 token 哈希。二维码只携带短期 loginNo 与 nonce，浏览器密钥通过 x-ttz-browser-secret 请求头轮询，确认后只能原子消费一次。
+API 默认监听 `http://localhost:3001/api`，非生产 Swagger 位于 `/api/docs`。
 
-## 数据库安全
+## 运行和构建
 
-迁移只在本地或临时库评审、演练。任何命令都不会自动连接或修改生产数据库；生产执行前必须备份并由维护者显式运行 prisma migrate deploy。
+```bash
+pnpm typecheck
+pnpm test
+pnpm build
+pnpm db:validate
 
-当前代码基线包含已执行的提醒与出勤约束（attendance status 0–6、notification_preferences），不重复创建该表或重放历史 SQL。尚未执行的 Prisma migrations 只新增 auth_sessions、login_session.browser_secret_hash 和 wcl_attendance_suggestions；部署前必须先对照真实数据库的 INFORMATION_SCHEMA 核验字段/索引状态，再分别评审、演练。不会生成或执行生产 migration。
+pnpm --filter @ttz/api start
+pnpm --filter @ttz/worker start
+```
 
-## 提交
+API 输出 `apps/api/dist/server.cjs`，Worker 输出 `apps/worker/dist/worker.cjs`。`REDIS_ENABLED=false` 时 Worker 会安全退出，基础 API 仍可运行。
 
-Husky 的 pre-commit 会运行 lint-staged、全仓类型检查和单元测试。提交信息使用 Conventional Commits。
+## 会话安全
+
+- 数据库只保存 access/refresh token 哈希。
+- refresh token 原子轮换；竞争请求只有一个成功。
+- 二维码只含短期 `loginNo` 与 nonce；浏览器密钥不进入二维码。
+- Web 确认在同一事务内消费二维码并创建会话。
+- 账号停用时撤销全部服务端会话。
+- 日志不得写入 token、Cookie、AppSecret 或 session_key。
+
+## 数据库基线与迁移
+
+维护者已明确执行 `docs/TTZ-后续迁移-提醒与出勤.sql`，因此不要重复执行。该脚本增加：
+
+- `attendance_records.manually_confirmed`；
+- `notification_preferences` 及现有用户默认行。
+
+Prisma schema 还映射 MVP 草案中的 `announcements`、`announcement_groups` 和 `site_settings`。映射不等于创建表。若基础 `TTZ-MVP-数据库变更草案.sql` 尚未完整执行，公告/公开设置接口会在运行时失败；部署前必须使用 `INFORMATION_SCHEMA` 核对真实表与字段。
+
+仓库中的三个 migration 尚未由本次开发执行：
+
+1. `20261112234500_auth_sessions`：`auth_sessions` 和 `login_session.browser_secret_hash`。
+2. `20261113010000_wcl_attendance_suggestions`：WCL 出勤建议表。
+3. `20261113020000_attendance_manual_confirmation`：与已执行的后续 SQL 重叠，生产环境应标记/处理基线，不能盲目重复执行。
+
+正式部署顺序：备份数据库 → 导出并核对 `INFORMATION_SCHEMA` → 在生产结构副本演练 → 评审 migration 差异 → 维护者显式执行。项目命令不会自动修改生产库。
+
+## CI 与提交
+
+GitHub Actions 使用 Node 26.13.1 / pnpm 12.18.0，执行依赖安装、Prisma 生成/校验、类型检查、单元测试和 API/Worker 构建；CI 使用占位数据库 URL，不连接生产库。
+
+Husky pre-commit 运行 lint-staged、全仓类型检查和测试。提交使用 Conventional Commits。

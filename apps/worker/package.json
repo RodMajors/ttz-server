@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "build": "node scripts/bundle.mjs",
     "dev": "tsx watch src/main.ts",
+    "start": "node dist/worker.cjs",
     "check": "tsc --noEmit",
     "typecheck": "tsc --noEmit"
   },
@@ -15,6 +17,7 @@
     "ioredis": "^5.6.1"
   },
   "devDependencies": {
+    "esbuild": "^0.28.2",
     "tsx": "^4.20.6",
     "typescript": "^6.0.3"
   }
