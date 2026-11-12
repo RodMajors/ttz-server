@@ -158,6 +158,7 @@ export class AttendanceService {
             characterId: record.characterId ? BigInt(record.characterId) : null,
             status: attendanceStatusToCode[record.status],
             note: record.note,
+            manuallyConfirmed: true,
             recordedBy: user.id,
           },
           update: {
@@ -165,6 +166,7 @@ export class AttendanceService {
             status: attendanceStatusToCode[record.status],
             note: record.note,
             source: 0,
+            manuallyConfirmed: true,
             recordedBy: user.id,
             recordedAt: new Date(),
           },

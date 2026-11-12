@@ -215,6 +215,7 @@ model AttendanceRecord {
   roleSnapshot          Int?      @map("role_snapshot") @db.TinyInt
   status                Int       @default(0) @db.TinyInt
   source                Int       @default(0) @db.TinyInt
+  manuallyConfirmed     Boolean   @map("manually_confirmed") @default(false)
   note                  String?   @db.VarChar(255)
   recordedBy            BigInt    @map("recorded_by") @db.UnsignedBigInt
   recordedAt            DateTime  @map("recorded_at") @default(now())

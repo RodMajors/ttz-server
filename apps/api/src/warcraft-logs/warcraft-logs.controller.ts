@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, NotFoundException, Param, Post, Put } from "@nestjs/common";
+import { Body, ConflictException, Controller, Get, Inject, NotFoundException, Param, Post, Put } from "@nestjs/common";
 import {
   applyWclSuggestionsSchema,
   attendanceStatusSchema,
@@ -164,10 +164,10 @@ export class WarcraftLogsController {
         if (!suggestion) continue;
         const existingAttendance = await transaction.attendanceRecord.findUnique({
           where: { activityId_userId: { activityId: report.activityId, userId: item.userId } },
-          select: { source: true },
+          select: { manuallyConfirmed: true },
         });
-        if (existingAttendance?.source === 0) {
-          throw new NotFoundException({
+        if (existingAttendance?.manuallyConfirmed) {
+          throw new ConflictException({
             code: "MANUAL_ATTENDANCE_PROTECTED",
             message: "WCL 建议不能覆盖负责人已经确认的人工出勤",
           });
