@@ -133,6 +133,9 @@ export class AuthService {
   }
 
   async pollQr(loginNo: string, browserSecret: string) {
+    if (typeof browserSecret !== "string" || !/^[A-Za-z0-9_-]{32,256}$/.test(browserSecret)) {
+      throw invalidQrSession();
+    }
     const login = await this.prisma.loginSession.findFirst({
       where: { loginNo, browserSecretHash: hash(browserSecret) },
     });
@@ -150,7 +153,7 @@ export class AuthService {
     if (login.status === 4) return { status: "CANCELLED" as const };
     if (!login.userId || login.consumedAt) throw invalidQrSession();
     const consumed = await this.prisma.loginSession.updateMany({
-      where: { id: login.id, status: 2, consumedAt: null },
+      where: { id: login.id, status: 2, consumedAt: null, expireAt: { gt: new Date() } },
       data: { consumedAt: new Date() },
     });
     if (!consumed.count) throw invalidQrSession();

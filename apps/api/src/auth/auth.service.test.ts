@@ -44,14 +44,44 @@ describe("AuthService QR session state machine", () => {
       authSession: { create: authSessionCreate },
     });
 
-    const result = await service.pollQr("login-no", "browser-secret");
+    const result = await service.pollQr("login-no", "a".repeat(43));
 
     expect(result.status).toBe("CONFIRMED");
     expect(updateMany).toHaveBeenCalledWith({
-      where: { id: 11n, status: 2, consumedAt: null },
+      where: { id: 11n, status: 2, consumedAt: null, expireAt: { gt: expect.any(Date) } },
       data: { consumedAt: expect.any(Date) },
     });
     expect(authSessionCreate).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a missing browser secret before querying the database", async () => {
+    const findFirst = vi.fn();
+    const service = createService({ loginSession: { findFirst } });
+    await expect(service.pollQr("login-no", "")).rejects.toMatchObject({
+      response: { code: "QR_SESSION_INVALID" },
+    });
+    expect(findFirst).not.toHaveBeenCalled();
+  });
+
+  it("does not issue a session when the QR code expires during consumption", async () => {
+    const authSessionCreate = vi.fn();
+    const service = createService({
+      loginSession: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: 11n,
+          userId: 7n,
+          status: 2,
+          expireAt: new Date(Date.now() + 1000),
+          consumedAt: null,
+        }),
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      authSession: { create: authSessionCreate },
+    });
+    await expect(service.pollQr("login-no", "a".repeat(43))).rejects.toMatchObject({
+      response: { code: "QR_SESSION_INVALID" },
+    });
+    expect(authSessionCreate).not.toHaveBeenCalled();
   });
 });
 
