@@ -1,0 +1,22 @@
+README.md
+  h_745ff005454789 51
+apps/api/package.json
+  h_745ff005454789 7-8
+apps/api/src/app.module.ts
+  h_745ff005454789 21
+apps/worker/package.json
+  h_745ff005454789 7-8
+package.json
+  h_745ff005454789 12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "903f1d51bb0a30e74d0eca32be4497428271e4b2",
+  "prompts": {},
+  "humans": {
+    "h_745ff005454789": {
+      "author": "RodMajors <pro-vana@outlook.com>"
+    }
+  }
+}
