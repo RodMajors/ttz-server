@@ -1,0 +1,22 @@
+apps/api/src/activities/activities.service.ts
+  h_745ff005454789 5-11,72-80,82-103,105-110,386-390,392-393,395-417,589-655
+apps/api/src/activities/activity-detail.test.ts
+  h_745ff005454789 1-91
+apps/api/src/activities/signup-decision-race.test.ts
+  h_745ff005454789 1-58
+apps/api/src/members/members.controller.ts
+  h_745ff005454789 287-294
+packages/contracts/src/index.ts
+  h_745ff005454789 112-177
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ef34f068143983fc85d6afb5158130ae075d5ad2",
+  "prompts": {},
+  "humans": {
+    "h_745ff005454789": {
+      "author": "RodMajors <pro-vana@outlook.com>"
+    }
+  }
+}
