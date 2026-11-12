@@ -1,0 +1,18 @@
+apps/api/src/warcraft-logs/warcraft-logs.controller.test.ts
+  h_745ff005454789 7-95
+apps/api/src/warcraft-logs/warcraft-logs.controller.ts
+  h_745ff005454789 9,51-61,77,79-81,84-85,87,94,96-97,219-240
+packages/contracts/src/index.ts
+  h_745ff005454789 323-330,344,347,359,393-428
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1703ce605332b3d2bdb292bd518a8814a74f666c",
+  "prompts": {},
+  "humans": {
+    "h_745ff005454789": {
+      "author": "RodMajors <pro-vana@outlook.com>"
+    }
+  }
+}
