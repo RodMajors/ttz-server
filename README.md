@@ -23,6 +23,8 @@ TTZ 公会站后端仓库。NestJS API、BullMQ worker、Prisma schema 和后端
 
 API 默认监听 http://localhost:3001/api。非生产环境 Swagger 位于 /api/docs。生产环境不公开 Swagger。
 
+生产 API 可先运行 pnpm --filter @ttz/api build，再运行 pnpm --filter @ttz/api start。构建先由 TypeScript 生成 Nest 装饰器元数据，再将工作区源码打包为 Node 可执行产物。启动仍需要实际数据库配置；健康存活检查不证明数据库连接正常。
+
 Web 使用 HttpOnly、SameSite=Strict 的不透明会话 Cookie；小程序使用短期 access token 与可轮换 refresh token。数据库只保存 token 哈希。二维码只携带短期 loginNo 与 nonce，浏览器密钥通过 x-ttz-browser-secret 请求头轮询，确认后只能原子消费一次。
 
 ## 数据库安全
