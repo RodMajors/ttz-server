@@ -1,0 +1,40 @@
+.env.example
+  h_1dc22111645538 14-15
+.gitignore
+  h_1dc22111645538 6-7
+apps/api/package.json
+  h_1dc22111645538 12-13
+apps/api/scripts/seed-local-admin.ts
+  h_1dc22111645538 1-57
+apps/api/src/attendance/attendance.service.test.ts
+  h_1dc22111645538 1-75
+apps/api/src/attendance/attendance.service.ts
+  h_1dc22111645538 83
+apps/api/src/auth/auth.controller.ts
+  h_1dc22111645538 1-14,23,39-54,153-166
+apps/api/src/auth/auth.service.test.ts
+  h_1dc22111645538 6-33
+apps/api/src/auth/auth.service.ts
+  h_1dc22111645538 2,6,36-46
+apps/api/src/auth/auth.types.ts
+  h_1dc22111645538 19
+apps/api/src/auth/local-dev-auth.constants.ts
+  h_1dc22111645538 1
+packages/config/src/index.ts
+  h_1dc22111645538 20
+packages/database/prisma/schema.prisma
+  h_1dc22111645538 3
+packages/database/src/index.ts
+  h_1dc22111645538 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d57a30fc47009c327588f2335bdff8181530ea52",
+  "prompts": {},
+  "humans": {
+    "h_1dc22111645538": {
+      "author": "rodmajors <liangzerui@eccom.com.cn>"
+    }
+  }
+}
