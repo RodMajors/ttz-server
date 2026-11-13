@@ -16,6 +16,6 @@ export interface AuthRequest {
   method: string;
   user?: AuthUser;
   authSessionId?: bigint;
-  authSource?: "bearer" | "cookie" | "development";
+  authSource?: "bearer" | "cookie";
   requestId?: string;
 }

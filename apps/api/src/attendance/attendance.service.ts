@@ -16,9 +16,6 @@ export class AttendanceService {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   async summary(user: AuthUser, filter: AttendanceFilter = {}) {
-    if (filter.memberId && filter.memberId !== user.id && user.privilege < 1) {
-      throw new ForbiddenException({ code: "ATTENDANCE_PRIVATE", message: "只能查看自己的详细出勤" });
-    }
     const userId = filter.memberId ?? user.id;
     const activities = await this.prisma.activity.findMany({
       where: {
@@ -78,16 +75,12 @@ export class AttendanceService {
       },
       orderBy: [{ status: "asc" }, { user: { guildNickname: "asc" } }],
     });
-    if (!canManage && !records.some((record) => record.userId === user.id)) {
-      throw new ForbiddenException({ code: "ATTENDANCE_PRIVATE", message: "只能查看自己的出勤记录" });
-    }
-    const visibleRecords = canManage ? records : records.filter((record) => record.userId === user.id);
     return {
       activityId: activity.id.toString(),
       activityName: activity.name,
       beginAt: activity.beginAt.toISOString(),
       canManage,
-      records: visibleRecords.map((record) => ({
+      records: records.map((record) => ({
         id: record.id.toString(),
         userId: record.userId.toString(),
         memberName: record.user.name ?? record.user.guildNickname ?? "TTZ 成员",

@@ -16,14 +16,6 @@ export class SessionAuthGuard implements CanActivate {
     if (this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [context.getHandler(), context.getClass()]))
       return true;
     const request = context.switchToHttp().getRequest<AuthRequest>();
-    const developmentUserId = this.developmentUserId(request);
-    if (developmentUserId) {
-      const user = await this.prisma.user.findUnique({ where: { id: developmentUserId } });
-      if (user?.status !== 1) throw required();
-      request.user = toAuthUser(user);
-      request.authSource = "development";
-      return true;
-    }
     const bearer = getBearer(request.headers.authorization);
     const cookie = parseCookies(request.headers.cookie)[cookieName()];
     const credential = bearer ?? cookie;
@@ -38,12 +30,6 @@ export class SessionAuthGuard implements CanActivate {
     request.authSessionId = session.id;
     request.authSource = bearer ? "bearer" : "cookie";
     return true;
-  }
-
-  private developmentUserId(request: AuthRequest) {
-    if (process.env.NODE_ENV === "production" || process.env.ALLOW_DEV_AUTH_HEADER !== "true") return undefined;
-    const header = request.headers["x-ttz-user-id"];
-    return typeof header === "string" && /^\d+$/.test(header) ? BigInt(header) : undefined;
   }
 }
 

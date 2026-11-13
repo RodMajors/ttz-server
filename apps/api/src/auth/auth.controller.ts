@@ -1,4 +1,17 @@
-import { Body, Controller, Get, Headers, Inject, Param, Patch, Post, Put, Req, Res } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Inject,
+  NotFoundException,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Req,
+  Res,
+} from "@nestjs/common";
 import {
   type MemberProfileInput,
   memberProfileSchema,
@@ -7,7 +20,7 @@ import {
   type WechatCodeLoginInput,
   wechatCodeLoginSchema,
 } from "@ttz/contracts";
-import type { Response } from "express";
+import type { Request, Response } from "express";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { AllowUnapproved, CurrentUser, Public } from "./auth.decorators";
 import { AuthService } from "./auth.service";
@@ -21,6 +34,22 @@ export class AuthController {
   @Post("wechat/code-login")
   codeLogin(@Body(new ZodValidationPipe(wechatCodeLoginSchema)) body: WechatCodeLoginInput) {
     return this.auth.loginWithWechat(body);
+  }
+
+  @Public()
+  @Post("local-dev-login")
+  async localDevLogin(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
+    if (!isLoopbackRequest(request)) throw new NotFoundException();
+    const result = await this.auth.loginWithLocalDevAccount();
+    setSessionCookie(response, result.accessToken);
+    return result.user;
+  }
+
+  @Public()
+  @Post("local-dev-token")
+  async localDevToken(@Req() request: Request) {
+    if (!isLoopbackRequest(request)) throw new NotFoundException();
+    return this.auth.loginWithLocalDevAccount();
   }
 
   @Public()
@@ -120,4 +149,18 @@ function clearSessionCookie(response: Response) {
 
 function cookieName() {
   return process.env.SESSION_COOKIE_NAME ?? "ttz_session";
+}
+
+function isLoopbackRequest(request: Request) {
+  const address = request.socket.remoteAddress?.toLowerCase().replace(/^::ffff:/, "");
+  const loopbackAddress = address === "::1" || Boolean(address?.startsWith("127."));
+  const hostHeader = request.headers.host;
+  if (!hostHeader) return false;
+  let host = "";
+  try {
+    host = new URL(`http://${hostHeader}`).hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  } catch {
+    return false;
+  }
+  return loopbackAddress && (host === "localhost" || host === "::1" || host.startsWith("127."));
 }

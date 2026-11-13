@@ -3,6 +3,8 @@ node_modules/
 .turbo/
 dist/
 coverage/
+dump.rdb
+packages/database/generated/
 .env
 .env.*
 !.env.example

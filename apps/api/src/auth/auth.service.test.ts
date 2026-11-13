@@ -3,6 +3,34 @@ import type { PrismaService } from "../database/prisma.service";
 import { AuthService, hash } from "./auth.service";
 
 describe("AuthService QR session state machine", () => {
+  it("issues a normal TTZ session only for the fixed local development account", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("ALLOW_LOCAL_DEV_LOGIN", "true");
+    const user = {
+      id: 7n,
+      name: "Local Admin",
+      wxNickname: "TTZ Local Dev",
+      guildNickname: "Local Admin",
+      privilege: 2,
+      isApproved: 1,
+      status: 1,
+    };
+    const create = vi.fn().mockImplementation(({ data }) => ({ id: 12n, ...data }));
+    const findUnique = vi.fn().mockResolvedValue(user);
+    const service = createService({ user: { findUnique }, authSession: { create } });
+
+    const result = await service.loginWithLocalDevAccount();
+
+    expect(findUnique).toHaveBeenCalledWith({ where: { openid: "local-dev-admin" } });
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ userId: 7n, kind: 1, refreshTokenHash: expect.any(String) }),
+      }),
+    );
+    expect(result.user.privilege).toBe(2);
+    vi.unstubAllEnvs();
+  });
+
   it("returns a rejected profile to pending review when the member updates it", async () => {
     const update = vi.fn().mockResolvedValue({
       id: 7n,

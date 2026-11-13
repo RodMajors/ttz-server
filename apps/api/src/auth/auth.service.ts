@@ -1,8 +1,9 @@
 import { createHash, randomBytes } from "node:crypto";
-import { ConflictException, Inject, Injectable, UnauthorizedException } from "@nestjs/common";
+import { ConflictException, Inject, Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
 import type { MemberProfileInput, WechatCodeLoginInput } from "@ttz/contracts";
 import { PrismaService } from "../database/prisma.service";
 import type { AuthUser } from "./auth.types";
+import { LOCAL_DEV_OPENID } from "./local-dev-auth.constants";
 
 const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 
@@ -28,6 +29,17 @@ export class AuthService {
     });
     if (user.status !== 1) {
       throw new UnauthorizedException({ code: "ACCOUNT_DISABLED", message: "账号已停用" });
+    }
+    return { ...(await this.issueSession(user.id, 1, true)), user: this.toAuthUser(user) };
+  }
+
+  async loginWithLocalDevAccount() {
+    if (process.env.NODE_ENV !== "development" || process.env.ALLOW_LOCAL_DEV_LOGIN !== "true") {
+      throw new NotFoundException();
+    }
+    const user = await this.prisma.user.findUnique({ where: { openid: LOCAL_DEV_OPENID } });
+    if (!user || user.status !== 1 || user.isApproved !== 1) {
+      throw new ConflictException({ code: "LOCAL_DEV_ACCOUNT_NOT_SEEDED", message: "请先创建本地开发管理员账号" });
     }
     return { ...(await this.issueSession(user.id, 1, true)), user: this.toAuthUser(user) };
   }
