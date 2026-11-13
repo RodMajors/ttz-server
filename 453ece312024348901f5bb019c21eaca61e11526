@@ -1,0 +1,60 @@
+.env.example
+  h_745ff005454789 6
+README.md
+  h_745ff005454789 19,22,32-33
+apps/api/package.json
+  h_745ff005454789 22-24
+apps/api/src/activities/activities.service.ts
+  h_745ff005454789 5,153-209,319-327,419-421,442-456
+apps/api/src/attendance/attendance.controller.ts
+  h_745ff005454789 2,11,13-32
+apps/api/src/attendance/attendance.service.ts
+  h_745ff005454789 1,7-13,18-19,21-43,49-54,56,58,60-99,110-150
+apps/api/src/members/characters.service.ts
+  h_745ff005454789 2,28-50
+apps/api/src/members/members.controller.ts
+  h_745ff005454789 1,5-6,9-11,13-14,30-53,58-68,72-105,109-110,114,118-127,155,158-289
+apps/api/src/warcraft-logs/warcraft-logs.controller.ts
+  h_745ff005454789 1-9,14,18-22,30-32,34-48,50,52-60,62-211
+apps/api/src/warcraft-logs/warcraft-logs.module.ts
+  h_745ff005454789 3-5
+apps/api/src/warcraft-logs/wcl-queue.service.ts
+  h_745ff005454789 1-37
+apps/worker/package.json
+  h_745ff005454789 11-15
+apps/worker/src/main.ts
+  h_745ff005454789 1-130
+packages/config/src/index.ts
+  h_745ff005454789 9-12
+packages/contracts/src/index.ts
+  h_745ff005454789 137,150-168,238-261,269-293
+packages/database/prisma/migrations/20261112234500_auth_sessions/migration.sql
+  h_745ff005454789 25
+packages/database/prisma/migrations/20261113010000_wcl_attendance_suggestions/migration.sql
+  h_745ff005454789 1-21
+packages/database/prisma/schema.prisma
+  h_745ff005454789 35,64,99-100,254,260-279,293-294
+packages/warcraft-logs/package.json
+  h_745ff005454789 1-19
+packages/warcraft-logs/src/index.test.ts
+  h_745ff005454789 1-60
+packages/warcraft-logs/src/index.ts
+  h_745ff005454789 1-111
+packages/warcraft-logs/tsconfig.json
+  h_745ff005454789 1-12
+pnpm-lock.yaml
+  h_745ff005454789 208-216,254-265,304-315,566-568,579-608,967-975,1014-1017,1071-1075,1092-1095,1270-1273,1390-1393,1432-1438,1458-1461,1465-1468,1566-1573,1599-1603,1644-1646,2011-2012,2019-2036,2358-2368,2412-2413,2452-2455,2464-2465,2679-2690,2777-2778,2805-2820,2839-2840,2843-2847,2941-2946,2991-2992,3056-3057
+pnpm-workspace.yaml
+  h_745ff005454789 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "453ece312024348901f5bb019c21eaca61e11526",
+  "prompts": {},
+  "humans": {
+    "h_745ff005454789": {
+      "author": "RodMajors <pro-vana@outlook.com>"
+    }
+  }
+}

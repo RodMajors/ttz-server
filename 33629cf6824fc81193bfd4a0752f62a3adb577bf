@@ -1,0 +1,22 @@
+apps/api/src/attendance/attendance.service.ts
+  h_745ff005454789 161,169
+apps/api/src/warcraft-logs/warcraft-logs.controller.test.ts
+  h_745ff005454789 1-33
+apps/api/src/warcraft-logs/warcraft-logs.controller.ts
+  h_745ff005454789 1,167,169-170
+packages/database/prisma/migrations/20261113020000_attendance_manual_confirmation/migration.sql
+  h_745ff005454789 1-6
+packages/database/prisma/schema.prisma
+  h_745ff005454789 218
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "33629cf6824fc81193bfd4a0752f62a3adb577bf",
+  "prompts": {},
+  "humans": {
+    "h_745ff005454789": {
+      "author": "RodMajors <pro-vana@outlook.com>"
+    }
+  }
+}

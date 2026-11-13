@@ -1,0 +1,14 @@
+apps/worker/src/main.ts
+  h_745ff005454789 30-33,35,37-39,52,60-63,66-68,72-92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5a8cbf1154aa91e91f4a337275e658091070f5a4",
+  "prompts": {},
+  "humans": {
+    "h_745ff005454789": {
+      "author": "RodMajors <pro-vana@outlook.com>"
+    }
+  }
+}

@@ -1,0 +1,20 @@
+README.md
+  h_745ff005454789 26-27
+apps/api/package.json
+  h_745ff005454789 6,8,20,36
+apps/api/scripts/bundle.mjs
+  h_745ff005454789 1-16
+pnpm-lock.yaml
+  h_745ff005454789 199-201,242-244
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "eea5c5bb38d375a9ba30d0ed123b6a504cbff5db",
+  "prompts": {},
+  "humans": {
+    "h_745ff005454789": {
+      "author": "RodMajors <pro-vana@outlook.com>"
+    }
+  }
+}

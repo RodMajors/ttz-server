@@ -1,0 +1,16 @@
+apps/api/src/auth/auth.service.test.ts
+  h_745ff005454789 47,51,56-85
+apps/api/src/auth/auth.service.ts
+  h_745ff005454789 136-138,156
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "80cb9af56c9158c711b77992e4cde90ba6a7f222",
+  "prompts": {},
+  "humans": {
+    "h_745ff005454789": {
+      "author": "RodMajors <pro-vana@outlook.com>"
+    }
+  }
+}

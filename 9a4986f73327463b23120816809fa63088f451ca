@@ -1,0 +1,30 @@
+apps/api/src/activities/roster-privacy.test.ts
+  h_745ff005454789 14,19-31
+apps/api/src/activities/signup-race.test.ts
+  h_745ff005454789 21-30
+apps/api/src/auth/auth.controller.ts
+  h_745ff005454789 1,51-59
+apps/api/src/auth/auth.service.test.ts
+  h_745ff005454789 122-131
+apps/api/src/auth/auth.service.ts
+  h_745ff005454789 238-239,242
+apps/api/src/auth/auth.types.ts
+  h_745ff005454789 4-5,8
+apps/api/src/auth/session-auth.guard.ts
+  h_745ff005454789 84-85,88
+apps/api/src/warcraft-logs/warcraft-logs.controller.test.ts
+  h_745ff005454789 20,38,53-65
+packages/contracts/src/index.ts
+  h_745ff005454789 29-50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9a4986f73327463b23120816809fa63088f451ca",
+  "prompts": {},
+  "humans": {
+    "h_745ff005454789": {
+      "author": "RodMajors <pro-vana@outlook.com>"
+    }
+  }
+}

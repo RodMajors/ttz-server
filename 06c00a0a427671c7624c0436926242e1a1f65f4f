@@ -1,0 +1,22 @@
+.github/workflows/ci.yml
+  h_745ff005454789 1-30
+README.md
+  h_745ff005454789 3,5,7-20,22-39,43-86,88,90-91,93,95,97-99,101,103,105,107
+apps/worker/package.json
+  h_745ff005454789 6,8,20
+apps/worker/scripts/bundle.mjs
+  h_745ff005454789 1-16
+pnpm-lock.yaml
+  h_745ff005454789 273-275
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "06c00a0a427671c7624c0436926242e1a1f65f4f",
+  "prompts": {},
+  "humans": {
+    "h_745ff005454789": {
+      "author": "RodMajors <pro-vana@outlook.com>"
+    }
+  }
+}
