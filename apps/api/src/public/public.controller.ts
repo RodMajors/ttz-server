@@ -1,5 +1,4 @@
 import { BadRequestException, Body, Controller, Get, Inject, Param, Put } from "@nestjs/common";
-import type { Prisma } from "@prisma/client";
 import {
   contactSettingSchema,
   guildProfileSchema,
@@ -8,6 +7,7 @@ import {
   siteSettingValueSchema,
   toolLinksSettingSchema,
 } from "@ttz/contracts";
+import type { Prisma } from "@ttz/database";
 import { CurrentUser, MinPrivilege, Public } from "../auth/auth.decorators";
 import type { AuthUser } from "../auth/auth.types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
