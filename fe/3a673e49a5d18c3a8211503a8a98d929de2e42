@@ -1,0 +1,14 @@
+apps/api/src/public/public.controller.ts
+  h_745ff005454789 10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fe3a673e49a5d18c3a8211503a8a98d929de2e42",
+  "prompts": {},
+  "humans": {
+    "h_745ff005454789": {
+      "author": "RodMajors <pro-vana@outlook.com>"
+    }
+  }
+}
