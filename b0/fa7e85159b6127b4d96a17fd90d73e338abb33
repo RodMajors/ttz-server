@@ -1,0 +1,18 @@
+README.md
+  h_745ff005454789 95,97,99
+packages/database/prisma/migrations/20261101000000_local_schema_baseline/migration.sql
+  h_745ff005454789 1-597
+packages/database/prisma/schema.prisma
+  h_745ff005454789 12-50,53,60-61,63-68,77-78,83-91,94,99-118,120,124,129-137,143-179,183-184,189-214,217-220,225-233,237-238,243-268,272-276,281-294,297-299,302,307-319,323-324,329-342,345-346,351-359,362,364,369-376,379-380,386-391,400-402,404,409-423,432-435,441-582
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b0fa7e85159b6127b4d96a17fd90d73e338abb33",
+  "prompts": {},
+  "humans": {
+    "h_745ff005454789": {
+      "author": "RodMajors <pro-vana@outlook.com>"
+    }
+  }
+}
