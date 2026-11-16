@@ -48,6 +48,9 @@ model User {
   wclAttendanceSuggestions                                                WclAttendanceSuggestion[]
   wcl_report_actors                                                       WclReportActor[]
   wcl_reports                                                             WclReport[]
+  wclUserLink                                                             WclUserLink?
+  wclOAuthSessions                                                        WclOAuthSession[]
+  verifiedCharacters                                                      Character[]                @relation("CharacterVerifiedBy")
 
   @@index([isApproved, status], map: "idx_users_approval")
   @@index([reviewedBy], map: "idx_users_reviewed_by")
@@ -99,13 +102,22 @@ model Character {
   id                       BigInt                    @id @default(autoincrement()) @db.UnsignedBigInt
   userId                   BigInt                    @map("user_id") @db.UnsignedBigInt
   name                     String                    @db.VarChar(64)
-  realm                    String                    @db.VarChar(64)
+  serverName               String                    @map("server_name") @db.VarChar(64)
+  serverSlug               String                    @map("server_slug") @db.VarChar(64)
+  serverRegion             String                    @default("cn") @map("server_region") @db.VarChar(16)
+  classId                  Int                       @map("class_id")
+  raceId                   Int?                      @map("race_id")
   faction                  Int?                      @db.TinyInt
-  spec                     Int?
   isMain                   Int                       @default(0) @map("is_main") @db.TinyInt
   isRetired                Int                       @default(0) @map("is_retired") @db.TinyInt
   remark                   String?                   @db.VarChar(255)
-  wclId                    BigInt?                   @map("wcl_id") @db.UnsignedBigInt
+  wclId                    BigInt                    @map("wcl_id") @db.UnsignedBigInt
+  wclCanonicalId           BigInt                    @map("wcl_canonical_id") @db.UnsignedBigInt
+  wclVerificationStatus    Int                       @default(0) @map("wcl_verification_status") @db.TinyInt
+  wclVerifiedAt             DateTime?                 @map("wcl_verified_at") @db.DateTime(0)
+  wclEvidence               String?                   @map("wcl_evidence") @db.VarChar(16)
+  wclVerifiedBy             BigInt?                   @map("wcl_verified_by") @db.UnsignedBigInt
+  wclVerificationNote      String?                   @map("wcl_verification_note") @db.VarChar(255)
   itemLevel                Int?                      @map("item_level")
   itemLevelUpdatedAt       DateTime?                 @map("item_level_updated_at") @db.DateTime(0)
   created_at               DateTime                  @default(now()) @db.DateTime(0)
@@ -114,15 +126,64 @@ model Character {
   signupChoices            ActivitySignupChoice[]
   signups                  ActivitySignup[]
   attendanceRecords        AttendanceRecord[]
-  specs                    specs?                    @relation(fields: [spec], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "characters_spec_id_fk")
   user                     User                      @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "characters_users_id_fk")
+  characterClass           classes                   @relation(fields: [classId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_character_class")
+  race                     Race?                     @relation(fields: [raceId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_character_race")
+  verifiedByUser           User?                     @relation("CharacterVerifiedBy", fields: [wclVerifiedBy], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_character_verified_by")
   wclAttendanceSuggestions WclAttendanceSuggestion[]
   wclReportActors          WclReportActor[]
 
-  @@unique([name, realm], map: "uk_char")
+  @@unique([serverRegion, serverSlug, name], map: "uk_character_identity")
+  @@unique([serverRegion, wclCanonicalId], map: "uk_character_wcl_canonical")
+  @@unique([serverRegion, wclId], map: "uk_character_wcl_id")
   @@index([userId], map: "idx_user_id")
-  @@index([spec], map: "characters_spec_id_fk")
+  @@index([classId], map: "idx_character_class")
+  @@index([raceId], map: "idx_character_race")
+  @@index([wclVerifiedBy], map: "idx_character_verified_by")
   @@map("characters")
+}
+
+model WclUserLink {
+  id             BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
+  userId         BigInt   @unique(map: "uk_wcl_user_link_user") @map("user_id") @db.UnsignedBigInt
+  wclUserId      Int      @map("wcl_user_id")
+  wclUsername    String   @map("wcl_username") @db.VarChar(64)
+  wclRegion      String   @default("cn") @map("wcl_region") @db.VarChar(16)
+  linkedAt       DateTime @map("linked_at") @db.DateTime(0)
+  lastVerifiedAt DateTime? @map("last_verified_at") @db.DateTime(0)
+  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_wcl_user_link_user")
+
+  @@unique([wclRegion, wclUserId], map: "uk_wcl_user_link_region_user")
+  @@map("wcl_user_links")
+}
+
+model WclOAuthSession {
+  id           BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  userId       BigInt    @map("user_id") @db.UnsignedBigInt
+  stateHash    String    @unique(map: "uk_wcl_oauth_state") @map("state_hash") @db.Char(64)
+  codeVerifier String    @map("code_verifier") @db.VarChar(255)
+  redirectUri  String    @map("redirect_uri") @db.VarChar(255)
+  expiresAt    DateTime  @map("expires_at") @db.DateTime(0)
+  consumedAt   DateTime? @map("consumed_at") @db.DateTime(0)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.DateTime(0)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_wcl_oauth_session_user")
+
+  @@index([userId, expiresAt], map: "idx_wcl_oauth_session_user")
+  @@index([expiresAt, consumedAt], map: "idx_wcl_oauth_session_expiry")
+  @@map("wcl_oauth_sessions")
+}
+
+model Race {
+  id         Int         @id
+  name       String      @db.VarChar(32)
+  enName     String?     @map("en_name") @db.VarChar(32)
+  faction    Int?        @db.TinyInt
+  icon       String?     @db.VarChar(255)
+  characters Character[]
+
+  @@map("races")
 }
 
 model ActivityType {
@@ -502,6 +563,7 @@ model classes {
   color       String? @db.VarChar(25)
   description String? @db.Text
   specs       specs[]
+  characters  Character[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -575,7 +637,6 @@ model specs {
   activity_signup_choices ActivitySignupChoice[]
   activity_signups        ActivitySignup[]
   attendance_records      AttendanceRecord[]
-  characters              Character[]
   classes                 classes                @relation(fields: [class], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "specs_classes_id_fk")
 
   @@index([class], map: "specs_classes_id_fk")

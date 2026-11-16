@@ -1,3 +1,8 @@
+const WCL_OAUTH_ORIGIN = "https://www.warcraftlogs.com";
+const WCL_API_ORIGINS = { global: WCL_OAUTH_ORIGIN, cn: "https://cn.warcraftlogs.com" } as const;
+
+export type WclRegion = keyof typeof WCL_API_ORIGINS;
+
 export interface WclActor {
   id: number;
   name: string;
@@ -25,6 +30,26 @@ export interface WclReportData {
   actors: WclActor[];
 }
 
+export interface WclCharacter {
+  id: number;
+  canonicalID: number;
+  name: string;
+  classID: number;
+  claimed?: boolean | null;
+  level?: number | null;
+  hidden?: boolean | null;
+  faction?: { id: number; name: string } | null;
+  server: { id?: number; slug: string; name: string; region?: { slug: string; name: string } | null };
+  guilds?: Array<{ id: number; name: string }> | null;
+}
+
+export interface WclCurrentUser {
+  id: number;
+  name: string;
+  battleTag?: string | null;
+  characters: WclCharacter[];
+}
+
 export class WarcraftLogsClient {
   private cachedToken?: { value: string; expiresAt: number };
   private tokenRequest?: Promise<string>;
@@ -34,6 +59,83 @@ export class WarcraftLogsClient {
     private readonly clientSecret: string,
     private readonly request: typeof fetch = fetch,
   ) {}
+
+  authorizationUrl(input: { redirectUri: string; state: string; codeChallenge: string }) {
+    this.requireCredentials();
+    const url = new URL(`${WCL_OAUTH_ORIGIN}/oauth/authorize`);
+    url.searchParams.set("client_id", this.clientId);
+    url.searchParams.set("redirect_uri", input.redirectUri);
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("state", input.state);
+    url.searchParams.set("code_challenge", input.codeChallenge);
+    url.searchParams.set("code_challenge_method", "S256");
+    return url.href;
+  }
+
+  async exchangeAuthorizationCode(input: { code: string; redirectUri: string; codeVerifier: string }) {
+    this.requireCredentials();
+    const response = await this.request(`${WCL_OAUTH_ORIGIN}/oauth/token`, {
+      method: "POST",
+      headers: {
+        authorization: `Basic ${Buffer.from(`${this.clientId}:${this.clientSecret}`).toString("base64")}`,
+        "content-type": "application/x-www-form-urlencoded",
+        accept: "application/json",
+      },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code: input.code,
+        redirect_uri: input.redirectUri,
+        code_verifier: input.codeVerifier,
+      }).toString(),
+      signal: AbortSignal.timeout(15_000),
+    });
+    return parseAccessToken(response, "authorization code");
+  }
+
+  async getCurrentUser(accessToken: string, region: WclRegion = "cn"): Promise<WclCurrentUser> {
+    const data = await this.graphqlUser<{ userData: { currentUser: WclCurrentUser | null } }>(
+      accessToken,
+      region,
+      [
+        "query TTZCurrentUser {",
+        " userData { currentUser {",
+        " id name battleTag",
+        " characters {",
+        " id canonicalID name classID claimed",
+        " server { slug name region { slug name } }",
+        " }",
+        " } }",
+        "}",
+      ].join(" "),
+      {},
+    );
+    if (!data.userData.currentUser) throw new Error("WCL current user was not returned");
+    return { ...data.userData.currentUser, characters: data.userData.currentUser.characters ?? [] };
+  }
+
+  async getCharacter(
+    name: string,
+    serverSlug: string,
+    serverRegion: string,
+    region: WclRegion = "cn",
+  ): Promise<WclCharacter | null> {
+    const query = [
+      "query TTZCharacter($name: String!, $serverSlug: String!, $serverRegion: String!) {",
+      " characterData { character(name: $name, serverSlug: $serverSlug, serverRegion: $serverRegion) {",
+      " id canonicalID name classID level hidden",
+      " faction { id name }",
+      " server { id slug name region { slug name } }",
+      " guilds { id name }",
+      " } }",
+      "}",
+    ].join(" ");
+    const data = await this.graphqlClient<{ characterData: { character: WclCharacter | null } }>(region, query, {
+      name,
+      serverSlug,
+      serverRegion,
+    });
+    return data.characterData.character;
+  }
 
   async getReport(code: string): Promise<WclReportData> {
     const query = [
@@ -45,11 +147,11 @@ export class WarcraftLogsClient {
       " } }",
       "}",
     ].join(" ");
-    const data = await this.graphql<{
+    const data = await this.graphqlClient<{
       reportData: {
         report: (Omit<WclReportData, "actors"> & { masterData: { actors: WclActor[] } }) | null;
       };
-    }>(query, { code });
+    }>("global", query, { code });
     const report = data.reportData.report;
     if (!report) throw new Error("WCL report was not found or is not public");
     return {
@@ -62,20 +164,35 @@ export class WarcraftLogsClient {
     };
   }
 
-  private async graphql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
-    const response = await this.request("https://www.warcraftlogs.com/api/v2/client", {
+  private graphqlClient<T>(region: WclRegion, query: string, variables: Record<string, unknown>) {
+    return this.graphql<T>(`${WCL_API_ORIGINS[region]}/api/v2/client`, this.accessToken(), query, variables);
+  }
+
+  private graphqlUser<T>(accessToken: string, region: WclRegion, query: string, variables: Record<string, unknown>) {
+    return this.graphql<T>(`${WCL_API_ORIGINS[region]}/api/v2/user`, Promise.resolve(accessToken), query, variables);
+  }
+
+  private async graphql<T>(
+    endpoint: string,
+    accessToken: Promise<string>,
+    query: string,
+    variables: Record<string, unknown>,
+  ): Promise<T> {
+    const response = await this.request(endpoint, {
       method: "POST",
       headers: {
-        authorization: `Bearer ${await this.accessToken()}`,
+        authorization: `Bearer ${await accessToken}`,
         "content-type": "application/json",
+        accept: "application/json",
       },
       body: JSON.stringify({ query, variables }),
       signal: AbortSignal.timeout(15_000),
     });
     if (!response.ok) throw new Error(`WCL GraphQL request failed with HTTP ${response.status}`);
     const payload = (await response.json()) as { data?: T; errors?: Array<{ message: string }> };
-    if (payload.errors?.length || !payload.data)
-      throw new Error(payload.errors?.[0]?.message ?? "WCL response was empty");
+    if (payload.errors?.length || !payload.data) {
+      throw new Error(payload.errors?.map((error) => error.message).join("; ") ?? "WCL response was empty");
+    }
     return payload.data;
   }
 
@@ -91,21 +208,34 @@ export class WarcraftLogsClient {
   }
 
   private async requestAccessToken() {
-    if (!this.clientId || !this.clientSecret) throw new Error("WCL API credentials are not configured");
-    const credentials = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString("base64");
-    const response = await this.request("https://www.warcraftlogs.com/oauth/token", {
+    this.requireCredentials();
+    const response = await this.request(`${WCL_OAUTH_ORIGIN}/oauth/token`, {
       method: "POST",
       headers: {
-        authorization: `Basic ${credentials}`,
+        authorization: `Basic ${Buffer.from(`${this.clientId}:${this.clientSecret}`).toString("base64")}`,
         "content-type": "application/x-www-form-urlencoded",
+        accept: "application/json",
       },
       body: "grant_type=client_credentials",
       signal: AbortSignal.timeout(10_000),
     });
-    if (!response.ok) throw new Error(`WCL OAuth request failed with HTTP ${response.status}`);
-    const payload = (await response.json()) as { access_token?: string; expires_in?: number };
-    if (!payload.access_token || !payload.expires_in) throw new Error("WCL OAuth response is missing an access token");
-    this.cachedToken = { value: payload.access_token, expiresAt: Date.now() + payload.expires_in * 1000 };
-    return payload.access_token;
+    const token = await parseAccessToken(response, "client credentials");
+    this.cachedToken = { value: token.accessToken, expiresAt: Date.now() + token.expiresIn * 1000 };
+    return token.accessToken;
   }
+
+  private requireCredentials() {
+    if (!this.clientId || !this.clientSecret) throw new Error("WCL API credentials are not configured");
+  }
+}
+
+async function parseAccessToken(response: Response, flow: string) {
+  if (!response.ok) throw new Error(`WCL OAuth ${flow} request failed with HTTP ${response.status}`);
+  const payload = (await response.json()) as { access_token?: string; expires_in?: number; token_type?: string };
+  if (!payload.access_token || !payload.expires_in) throw new Error("WCL OAuth response is missing an access token");
+  return {
+    accessToken: payload.access_token,
+    expiresIn: payload.expires_in,
+    tokenType: payload.token_type ?? "Bearer",
+  };
 }

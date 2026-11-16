@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query } from "@nestjs/common";
 import {
   type CreateCharacterInput,
+  characterVerificationDecisionSchema,
   createCharacterSchema,
   guildGroupInputSchema,
   guildGroupMemberSchema,
@@ -18,7 +19,7 @@ import { CurrentUser, MinPrivilege } from "../auth/auth.decorators";
 import type { AuthUser } from "../auth/auth.types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { PrismaService } from "../database/prisma.service";
-import { CharactersService } from "./characters.service";
+import { CharactersService, characterInclude, serializeCharacter } from "./characters.service";
 
 @Controller()
 export class MembersController {
@@ -64,7 +65,11 @@ export class MembersController {
           guildNickname: true,
           avatar: true,
           privilege: true,
-          characters: { where: { isRetired: 0 }, orderBy: [{ isMain: "desc" }, { name: "asc" }] },
+          characters: {
+            where: { isRetired: 0 },
+            include: characterInclude,
+            orderBy: [{ isMain: "desc" }, { name: "asc" }],
+          },
           groupMemberships: { include: { group: true } },
         },
       }),
@@ -136,6 +141,34 @@ export class MembersController {
   @Post("characters/:id/retire")
   retire(@CurrentUser() user: AuthUser, @Param("id", new ZodValidationPipe(idSchema)) id: string) {
     return this.characters.retire(user.id, BigInt(id));
+  }
+
+  @Post("characters/:id/request-verification")
+  requestCharacterVerification(
+    @CurrentUser() user: AuthUser,
+    @Param("id", new ZodValidationPipe(idSchema)) id: string,
+  ) {
+    return this.characters.requestVerification(user.id, BigInt(id));
+  }
+
+  @Get("characters/pending-verification")
+  @MinPrivilege(1)
+  async pendingCharacterVerification() {
+    const characters = await this.characters.pendingVerification();
+    return characters.map((character) => ({
+      ...serializeCharacter(character),
+      memberName: character.user.name ?? character.user.guildNickname ?? "TTZ 成员",
+    }));
+  }
+
+  @Post("characters/:id/verification-decision")
+  @MinPrivilege(1)
+  async decideCharacterVerification(
+    @CurrentUser() user: AuthUser,
+    @Param("id", new ZodValidationPipe(idSchema)) id: string,
+    @Body(new ZodValidationPipe(characterVerificationDecisionSchema)) body: { approved: boolean; note?: string | null },
+  ) {
+    return serializeCharacter(await this.characters.decideVerification(BigInt(id), body.approved, body.note, user.id));
   }
 
   @Get("notification-preferences")
@@ -316,33 +349,5 @@ function serializeGroup(group: {
     description: group.description,
     isActive: group.isActive === 1,
     sort: group.sort,
-  };
-}
-
-function serializeCharacter(character: {
-  id: bigint;
-  userId: bigint;
-  name: string;
-  realm: string;
-  faction: number | null;
-  spec: number | null;
-  isMain: number;
-  isRetired: number;
-  wclId: bigint | null;
-  itemLevel: number | null;
-  itemLevelUpdatedAt: Date | null;
-}) {
-  return {
-    id: character.id.toString(),
-    userId: character.userId.toString(),
-    name: character.name,
-    realm: character.realm,
-    faction: character.faction,
-    specId: character.spec,
-    isMain: character.isMain === 1,
-    isRetired: character.isRetired === 1,
-    itemLevel: character.itemLevel,
-    itemLevelUpdatedAt: character.itemLevelUpdatedAt?.toISOString() ?? null,
-    wclId: character.wclId?.toString() ?? null,
   };
 }

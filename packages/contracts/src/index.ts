@@ -118,11 +118,27 @@ export const characterSummarySchema = z.object({
   userId: idSchema,
   name: z.string(),
   realm: z.string(),
+  serverSlug: z.string(),
+  serverRegion: z.string(),
+  classId: z.number().int(),
+  className: z.string(),
+  raceId: z.number().int().nullable(),
+  raceName: z.string().nullable(),
   faction: z.number().int().nullable(),
-  specId: z.number().int().nullable(),
   isMain: z.boolean(),
   isRetired: z.boolean(),
   itemLevel: z.number().int().nullable(),
+  verificationStatus: z.enum(["UNVERIFIED", "PENDING", "VERIFIED", "REJECTED"]),
+  verificationEvidence: z.string().nullable(),
+  wclId: idSchema,
+  wclCanonicalId: idSchema,
+  availableSpecs: z.array(
+    z.object({
+      id: z.number().int(),
+      name: z.string(),
+      role: roleSchema.nullable(),
+    }),
+  ),
 });
 export type CharacterSummary = z.infer<typeof characterSummarySchema>;
 export const characterListSchema = z.array(characterSummarySchema);
@@ -219,15 +235,46 @@ export type UpdateActivityInput = z.infer<typeof updateActivitySchema>;
 
 export const createCharacterSchema = z.object({
   name: z.string().trim().min(2).max(64),
-  realm: z.string().trim().min(2).max(64),
-  faction: z.number().int().min(0).max(1).nullable().optional(),
-  specId: z.number().int().positive().nullable().optional(),
-  itemLevel: z.number().int().min(1).max(999).nullable().optional(),
+  serverSlug: z.string().trim().min(2).max(64),
+  serverRegion: z.string().trim().min(2).max(16).default("cn"),
   isMain: z.boolean().default(false),
 });
 export type CreateCharacterInput = z.infer<typeof createCharacterSchema>;
-export const updateCharacterSchema = createCharacterSchema.partial();
+export const updateCharacterSchema = z.object({
+  itemLevel: z.number().int().min(1).max(999).nullable().optional(),
+});
 export type UpdateCharacterInput = z.infer<typeof updateCharacterSchema>;
+
+export const wclAuthorizeSchema = z.object({ authorizationUrl: z.string().url() });
+export const wclLinkStatusSchema = z.object({
+  linked: z.boolean(),
+  wclUserId: z.number().int().nullable(),
+  wclUsername: z.string().nullable(),
+  linkedAt: isoDateTimeSchema.nullable(),
+  lastVerifiedAt: isoDateTimeSchema.nullable(),
+});
+export const wclCharacterSearchSchema = z.object({
+  name: z.string().trim().min(2).max(64),
+  serverSlug: z.string().trim().min(2).max(64),
+  serverRegion: z.string().trim().min(2).max(16).default("cn"),
+});
+export const wclCharacterCandidateSchema = z.object({
+  name: z.string(),
+  realm: z.string(),
+  serverSlug: z.string(),
+  serverRegion: z.string(),
+  classId: z.number().int(),
+  className: z.string(),
+  faction: z.number().int().nullable(),
+  guildNames: z.array(z.string()),
+  level: z.number().int().nullable(),
+  wclId: idSchema,
+  wclCanonicalId: idSchema,
+});
+export const characterVerificationDecisionSchema = z.object({
+  approved: z.boolean(),
+  note: z.string().trim().max(255).nullable().optional(),
+});
 
 export const memberApprovalSchema = z
   .object({
@@ -299,8 +346,7 @@ export const guildGroupMemberSchema = z.object({ userId: idSchema });
 export const signupSchema = z
   .object({
     characterId: idSchema,
-    preferredRole: roleSchema.nullable().optional(),
-    preferredSpecId: z.number().int().positive().nullable().optional(),
+    preferredSpecId: z.number().int().positive(),
     note: z.string().trim().max(255).nullable().optional(),
     choices: z
       .array(
@@ -332,8 +378,7 @@ export const rosterEntrySchema = z.object({
   signupId: idSchema,
   status: z.enum(["CONFIRMED", "BENCH"]),
   characterId: idSchema,
-  preferredSpecId: z.number().int().positive().nullable().optional(),
-  preferredRole: roleSchema.nullable().optional(),
+  preferredSpecId: z.number().int().positive(),
   groupNo: z.number().int().min(1).max(8).nullable().optional(),
   orderIndex: z.number().int().min(0).max(100),
 });

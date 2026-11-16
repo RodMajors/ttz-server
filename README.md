@@ -48,6 +48,8 @@ pnpm db:generate
 pnpm dev
 ```
 
+修改 `packages/database/prisma/schema.prisma` 后，先运行 `pnpm db:validate`。本地开发数据库应用已提交的 migration 使用 `pnpm db:migrate`；查看应用状态使用 `pnpm db:migrate:status`。迁移后运行 `pnpm db:generate` 更新 Prisma Client。`db:migrate` 会实际修改 `.env` 中 `DATABASE_URL` 指向的数据库，只应在本地开发库使用。
+
 复制 `.env.example` 为仓库根目录的 `.env`。API 与 Worker 的 `dev` / `start` 命令均在执行入口前通过 Node `--env-file=../../.env` 加载该文件；已有环境变量优先。主要变量：
 
 - `DATABASE_URL`：MySQL 连接。不要在文档或仓库中提交生产凭证。
@@ -55,6 +57,8 @@ pnpm dev
 - `WEB_ORIGIN`：唯一允许携带 Cookie 的 Web Origin。
 - `WECHAT_APP_ID` / `WECHAT_APP_SECRET`：微信服务端凭证。
 - `WCL_CLIENT_ID` / `WCL_CLIENT_SECRET`：Warcraft Logs client credentials。
+- `WCL_REGION`：`cn` 或 `global`，控制 GraphQL 数据区；OAuth 固定使用全球 OAuth endpoint。
+- `WCL_REDIRECT_URI`：已在 WCL Client 登记的完全匹配回调 URL。API 本地默认监听 `3001`，建议登记 `http://127.0.0.1:3001/api/auth/wcl/callback`；生产回调为 `https://api.ttzwow.com/api/auth/wcl/callback`。若 WCL Client 尚未登记这些 URI，应先在 Client 配置中添加。
 - `SESSION_COOKIE_NAME`、`SESSION_TTL_SECONDS`、`QR_SESSION_TTL_SECONDS`：会话配置。
 - `ALLOW_DEV_AUTH_HEADER`：仅非生产本地调试；生产代码永远忽略开发身份头。
 

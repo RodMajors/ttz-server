@@ -71,7 +71,7 @@ export class AttendanceService {
       where: { activityId },
       include: {
         user: { select: { id: true, name: true, guildNickname: true } },
-        character: { select: { id: true, name: true, realm: true } },
+        character: { select: { id: true, name: true, serverName: true } },
       },
       orderBy: [{ status: "asc" }, { user: { guildNickname: "asc" } }],
     });
@@ -86,7 +86,7 @@ export class AttendanceService {
         memberName: record.user.name ?? record.user.guildNickname ?? "TTZ 成员",
         characterId: record.characterId?.toString() ?? null,
         characterName: record.characterNameSnapshot ?? record.character?.name ?? null,
-        realm: record.realmSnapshot ?? record.character?.realm ?? null,
+        realm: record.realmSnapshot ?? record.character?.serverName ?? null,
         status: attendanceCodeToStatus[record.status] ?? "UNKNOWN",
         note: canManage ? record.note : null,
       })),

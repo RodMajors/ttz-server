@@ -20,7 +20,11 @@ describe("WCL attendance confirmation", () => {
         ]),
       },
     };
-    const controller = new WarcraftLogsController(prisma as unknown as PrismaService, {} as WclQueueService);
+    const controller = new WarcraftLogsController(
+      prisma as unknown as PrismaService,
+      {} as WclQueueService,
+      {} as never,
+    );
 
     await expect(controller.list(member(), "2")).resolves.toEqual([
       {
@@ -56,7 +60,7 @@ describe("WCL attendance confirmation", () => {
               realmName: "伊森利恩",
               characterId: 5n,
               matchStatus: 1,
-              character: { id: 5n, name: "Actor", realm: "伊森利恩", userId: 6n },
+              character: { id: 5n, name: "Actor", serverName: "伊森利恩", userId: 6n },
             },
           ],
           suggestions: [
@@ -71,7 +75,11 @@ describe("WCL attendance confirmation", () => {
         }),
       },
     };
-    const controller = new WarcraftLogsController(prisma as unknown as PrismaService, {} as WclQueueService);
+    const controller = new WarcraftLogsController(
+      prisma as unknown as PrismaService,
+      {} as WclQueueService,
+      {} as never,
+    );
 
     const result = await controller.get(member(), "1");
 
@@ -105,7 +113,11 @@ describe("WCL attendance confirmation", () => {
       character: { findFirst: vi.fn().mockResolvedValue({ id: 5n, userId: 6n }) },
       $transaction: vi.fn(async (fn: (tx: typeof transaction) => unknown) => fn(transaction)),
     };
-    const controller = new WarcraftLogsController(prisma as unknown as PrismaService, {} as WclQueueService);
+    const controller = new WarcraftLogsController(
+      prisma as unknown as PrismaService,
+      {} as WclQueueService,
+      {} as never,
+    );
     await controller.mapActors(member(), "1", {
       mappings: [{ actorId: "7", characterId: "5", ignored: false }],
     });
@@ -123,7 +135,11 @@ describe("WCL attendance confirmation", () => {
       wclReport: { findUnique: vi.fn().mockResolvedValue({ id: 1n, activityId: 2n, activity: { creator: 3n } }) },
       $transaction: vi.fn(async (fn: (tx: typeof transaction) => unknown) => fn(transaction)),
     };
-    const controller = new WarcraftLogsController(prisma as unknown as PrismaService, {} as WclQueueService);
+    const controller = new WarcraftLogsController(
+      prisma as unknown as PrismaService,
+      {} as WclQueueService,
+      {} as never,
+    );
     const request = controller.applySuggestions(member(), "1", { statuses: [{ userId: "6", status: "PRESENT" }] });
     if (manuallyConfirmed) {
       await expect(request).rejects.toMatchObject({ response: { code: "MANUAL_ATTENDANCE_PROTECTED" } });

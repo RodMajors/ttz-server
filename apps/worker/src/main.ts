@@ -25,7 +25,7 @@ const worker = new Worker(
       const imported = await wcl.getReport(report.reportCode);
       const candidateCharacters = await prisma.character.findMany({
         where: { isRetired: 0, user: { isApproved: 1, status: 1 } },
-        select: { id: true, userId: true, name: true, realm: true, wclId: true },
+        select: { id: true, userId: true, name: true, serverName: true, wclId: true },
       });
       const previousActors = await prisma.wclReportActor.findMany({
         where: { reportId, matchedBy: { not: null } },
@@ -41,7 +41,7 @@ const worker = new Worker(
             : candidateCharacters.find(
                 (character) =>
                   normalize(character.name) === normalize(actor.name) &&
-                  normalize(character.realm) === normalize(actor.server ?? ""),
+                  normalize(character.serverName) === normalize(actor.server ?? ""),
               );
         return {
           reportId,

@@ -53,6 +53,71 @@ describe("WarcraftLogsClient", () => {
 
     await expect(client.getReport("PRIVATE01")).rejects.toThrow("Report not found");
   });
+
+  it("builds the documented PKCE authorization URL without a scope parameter", () => {
+    const client = new WarcraftLogsClient("client-id", "client-secret");
+    const url = new URL(
+      client.authorizationUrl({
+        redirectUri: "http://127.0.0.1:3001/api/auth/wcl/callback",
+        state: "state-token",
+        codeChallenge: "challenge",
+      }),
+    );
+    expect(url.origin).toBe("https://www.warcraftlogs.com");
+    expect(url.searchParams.get("client_id")).toBe("client-id");
+    expect(url.searchParams.get("response_type")).toBe("code");
+    expect(url.searchParams.get("state")).toBe("state-token");
+    expect(url.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(url.searchParams.has("scope")).toBe(false);
+  });
+
+  it("exchanges a PKCE authorization code and reads claimed characters from the regional user endpoint", async () => {
+    const request = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ access_token: "user-token", expires_in: 31104000 }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            userData: {
+              currentUser: {
+                id: 42,
+                name: "RodMajors",
+                characters: [
+                  {
+                    id: 101,
+                    canonicalID: 101,
+                    name: "Veliotha",
+                    classID: 10,
+                    claimed: true,
+                    server: { id: 569, slug: "anzu", name: "安苏", region: { slug: "CN", name: "China" } },
+                  },
+                ],
+              },
+            },
+          },
+        }),
+      );
+    const client = new WarcraftLogsClient("client-id", "client-secret", request);
+    const token = await client.exchangeAuthorizationCode({
+      code: "authorization-code",
+      redirectUri: "http://127.0.0.1:3001/api/auth/wcl/callback",
+      codeVerifier: "a-random-code-verifier-that-is-long-enough-for-pkce-0123456789",
+    });
+    const profile = await client.getCurrentUser(token.accessToken, "cn");
+
+    expect(token.accessToken).toBe("user-token");
+    expect(profile.id).toBe(42);
+    expect(profile.characters[0]).toMatchObject({ name: "Veliotha", server: { slug: "anzu", region: { slug: "CN" } } });
+    expect(request.mock.calls[0]?.[0]).toBe("https://www.warcraftlogs.com/oauth/token");
+    expect(request.mock.calls[0]?.[1]).toMatchObject({
+      body: expect.stringContaining("grant_type=authorization_code"),
+      headers: expect.objectContaining({ authorization: expect.stringContaining("Basic ") }),
+    });
+    expect(request.mock.calls[1]?.[0]).toBe("https://cn.warcraftlogs.com/api/v2/user");
+    expect(request.mock.calls[1]?.[1]).toMatchObject({
+      headers: expect.objectContaining({ authorization: "Bearer user-token" }),
+    });
+  });
 });
 
 function jsonResponse(payload: unknown) {

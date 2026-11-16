@@ -15,6 +15,8 @@
     "typecheck": "turbo run typecheck",
     "db:generate": "pnpm --filter @ttz/database generate",
     "db:validate": "pnpm --filter @ttz/database check",
+    "db:migrate": "pnpm --filter @ttz/database migrate:dev",
+    "db:migrate:status": "pnpm --filter @ttz/database migrate:status",
     "prepare": "husky"
   },
   "devDependencies": {

@@ -1,16 +1,29 @@
-import { Body, ConflictException, Controller, Get, Inject, NotFoundException, Param, Post, Put } from "@nestjs/common";
+import {
+  Body,
+  ConflictException,
+  Controller,
+  Get,
+  Inject,
+  NotFoundException,
+  Param,
+  Post,
+  Put,
+  Query,
+} from "@nestjs/common";
 import {
   applyWclSuggestionsSchema,
   attendanceStatusSchema,
   idSchema,
   registerWclReportSchema,
   wclActorMappingSchema,
+  wclCharacterSearchSchema,
 } from "@ttz/contracts";
 import { attendanceCodeToStatus, attendanceStatusToCode } from "../activities/activity.constants";
 import { CurrentUser } from "../auth/auth.decorators";
 import type { AuthUser } from "../auth/auth.types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { PrismaService } from "../database/prisma.service";
+import { WclBindingService } from "./wcl-binding.service";
 import { WclQueueService } from "./wcl-queue.service";
 
 @Controller()
@@ -18,7 +31,19 @@ export class WarcraftLogsController {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(WclQueueService) private readonly queue: WclQueueService,
+    @Inject(WclBindingService) private readonly binding: WclBindingService,
   ) {}
+
+  @Get("wcl/characters")
+  searchCharacter(
+    @Query(new ZodValidationPipe(wclCharacterSearchSchema)) query: {
+      name: string;
+      serverSlug: string;
+      serverRegion: string;
+    },
+  ) {
+    return this.binding.searchCharacter(query.name, query.serverSlug, query.serverRegion);
+  }
 
   @Post("activities/:id/wcl-reports")
   async register(
@@ -65,7 +90,7 @@ export class WarcraftLogsController {
       where: { id: BigInt(id) },
       include: {
         activity: { select: { creator: true } },
-        actors: { include: { character: { select: { id: true, name: true, realm: true, userId: true } } } },
+        actors: { include: { character: { select: { id: true, name: true, serverName: true, userId: true } } } },
         suggestions: { include: { user: { select: { id: true, name: true, guildNickname: true } } } },
       },
     });
@@ -86,7 +111,7 @@ export class WarcraftLogsController {
         characterId: actor.characterId?.toString() ?? null,
         matchStatus: actor.matchStatus,
         character: actor.character
-          ? { id: actor.character.id.toString(), name: actor.character.name, realm: actor.character.realm }
+          ? { id: actor.character.id.toString(), name: actor.character.name, realm: actor.character.serverName }
           : null,
       })),
       suggestions: report.suggestions.map((suggestion) => ({

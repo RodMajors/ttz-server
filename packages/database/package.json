@@ -9,7 +9,9 @@
   "scripts": {
     "check": "node scripts/validate.mjs",
     "typecheck": "node scripts/validate.mjs",
-    "generate": "prisma generate"
+    "generate": "prisma generate",
+    "migrate:dev": "prisma migrate dev",
+    "migrate:status": "prisma migrate status"
   },
   "dependencies": {
     "@prisma/client": "^6.16.2"

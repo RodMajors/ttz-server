@@ -2,6 +2,7 @@ import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundExce
 import type { CreateActivityInput, Role, SignupInput, UpdateActivityInput } from "@ttz/contracts";
 import type { AuthUser } from "../auth/auth.types";
 import { PrismaService } from "../database/prisma.service";
+import { characterInclude, serializeCharacter } from "../members/characters.service";
 import {
   activityCodeToStatus,
   attendanceStatusToCode,
@@ -72,8 +73,8 @@ export class ActivitiesService {
         signups: {
           include: {
             user: { select: { id: true, name: true, guildNickname: true } },
-            character: true,
-            choices: { include: { character: true }, orderBy: { priority: "asc" } },
+            character: { include: characterInclude },
+            choices: { include: { character: { include: characterInclude } }, orderBy: { priority: "asc" } },
           },
           orderBy: [{ groupNo: "asc" }, { orderIndex: "asc" }],
         },
@@ -239,12 +240,17 @@ export class ActivitiesService {
           where: { isApproved: 1 },
           select: {
             id: true,
-            characters: { where: { isRetired: 0 }, orderBy: { isMain: "desc" }, take: 1 },
+            characters: {
+              where: { isRetired: 0 },
+              include: characterInclude,
+              orderBy: { isMain: "desc" },
+              take: 1,
+            },
           },
         }),
         transaction.activitySignup.findMany({
           where: { activityId: id, status: { in: [0, 1, 2] } },
-          include: { character: true },
+          include: { character: { include: characterInclude } },
         }),
       ]);
       const signupByUser = new Map(signups.map((signup) => [signup.userId.toString(), signup]));
@@ -260,7 +266,7 @@ export class ActivitiesService {
             userId: member.id,
             characterId: character?.id ?? null,
             characterNameSnapshot: character?.name ?? null,
-            realmSnapshot: character?.realm ?? null,
+            realmSnapshot: character?.serverName ?? null,
             roleSnapshot: isRostered ? signup.preferredRole : null,
             status:
               signup?.status === signupStatusToCode.BENCH
@@ -286,6 +292,15 @@ export class ActivitiesService {
     });
     if (!character)
       throw new ForbiddenException({ code: "CHARACTER_NOT_OWNED", message: "只能使用自己的有效角色报名" });
+    if (!input.preferredSpecId) {
+      throw new ConflictException({ code: "SIGNUP_SPEC_REQUIRED", message: "请选择本次出战专精" });
+    }
+    const primarySpec = await this.prisma.specs.findFirst({
+      where: { id: input.preferredSpecId, class: character.classId },
+    });
+    if (!primarySpec) {
+      throw new ConflictException({ code: "SIGNUP_SPEC_INVALID", message: "所选专精不属于出战角色职业" });
+    }
     const existing = await this.prisma.activitySignup.findUnique({
       where: { activityId_userId: { activityId: id, userId: user.id } },
     });
@@ -303,13 +318,30 @@ export class ActivitiesService {
       throw new ConflictException({ code: "CONFIRMED_SIGNUP_LOCKED", message: "报名已由团长确认，不能自行修改" });
     }
     const choiceIds = input.choices.map((choice) => BigInt(choice.characterId));
-    const ownedChoiceCount = choiceIds.length
-      ? await this.prisma.character.count({
+    const ownedChoices = choiceIds.length
+      ? await this.prisma.character.findMany({
           where: { id: { in: choiceIds }, userId: user.id, isRetired: 0 },
+          select: { id: true, classId: true },
         })
-      : 0;
-    if (ownedChoiceCount !== new Set(choiceIds.map(String)).size) {
+      : [];
+    if (ownedChoices.length !== new Set(choiceIds.map(String)).size) {
       throw new ForbiddenException({ code: "CHARACTER_NOT_OWNED", message: "备选角色必须属于当前成员" });
+    }
+    if (input.choices.length) {
+      const specs = await this.prisma.specs.findMany({
+        where: { id: { in: [...new Set(input.choices.map((choice) => choice.specId))] } },
+        select: { id: true, class: true },
+      });
+      const specById = new Map(specs.map((spec) => [spec.id, spec]));
+      const characterById = new Map(ownedChoices.map((choice) => [choice.id.toString(), choice]));
+      const invalid = input.choices.some((choice) => {
+        const spec = specById.get(choice.specId);
+        const choiceCharacter = characterById.get(choice.characterId);
+        return !spec || !choiceCharacter || spec.class !== choiceCharacter.classId;
+      });
+      if (invalid) {
+        throw new ConflictException({ code: "SIGNUP_SPEC_INVALID", message: "备选专精必须属于对应角色职业" });
+      }
     }
     return this.prisma.$transaction(async (transaction) => {
       const open = await transaction.activity.updateMany({
@@ -329,7 +361,7 @@ export class ActivitiesService {
           },
           data: {
             characterId,
-            preferredRole: input.preferredRole ? roleToCode[input.preferredRole] : null,
+            preferredRole: primarySpec.role,
             preferredSpecId: input.preferredSpecId,
             note: input.note,
             status: 0,
@@ -350,7 +382,7 @@ export class ActivitiesService {
             activityId: id,
             userId: user.id,
             characterId,
-            preferredRole: input.preferredRole ? roleToCode[input.preferredRole] : null,
+            preferredRole: primarySpec.role,
             preferredSpecId: input.preferredSpecId,
             note: input.note,
           },
@@ -483,7 +515,7 @@ export class ActivitiesService {
       where: { activityId: id, status: { in: [1, 2] } },
       include: {
         user: { select: { id: true, name: true, guildNickname: true } },
-        character: true,
+        character: { include: characterInclude },
       },
       orderBy: [{ groupNo: "asc" }, { orderIndex: "asc" }],
     });
@@ -508,8 +540,7 @@ export class ActivitiesService {
         signupId: string;
         status: "CONFIRMED" | "BENCH";
         characterId: string;
-        preferredSpecId?: number | null;
-        preferredRole?: Role | null;
+        preferredSpecId: number;
         groupNo?: number | null;
         orderIndex: number;
       }>;
@@ -547,6 +578,18 @@ export class ActivitiesService {
     if (validCharacterCount !== input.entries.length) {
       throw new ForbiddenException({ code: "CHARACTER_NOT_OWNED", message: "名单角色必须属于对应报名成员" });
     }
+    for (const entry of input.entries) {
+      const character = await this.prisma.character.findUnique({
+        where: { id: BigInt(entry.characterId) },
+        select: { classId: true },
+      });
+      const spec = await this.prisma.specs.findFirst({
+        where: { id: entry.preferredSpecId, class: character?.classId ?? -1 },
+      });
+      if (!character || !spec) {
+        throw new ConflictException({ code: "SIGNUP_SPEC_INVALID", message: "名单专精必须属于角色职业" });
+      }
+    }
     return this.prisma.$transaction(async (transaction) => {
       const version = await transaction.activity.updateMany({
         where: { id, version: input.version },
@@ -575,7 +618,7 @@ export class ActivitiesService {
             status: signupStatusToCode[entry.status],
             characterId: BigInt(entry.characterId),
             preferredSpecId: entry.preferredSpecId,
-            preferredRole: entry.preferredRole ? roleToCode[entry.preferredRole] : null,
+            preferredRole: (await transaction.specs.findUnique({ where: { id: entry.preferredSpecId } }))?.role,
             groupNo: entry.groupNo,
             orderIndex: entry.orderIndex,
             handledBy: user.id,
@@ -619,30 +662,6 @@ function versionConflict() {
 }
 
 const roleCodeToRole = [null, "TANK", "HEALER", "MELEE", "RANGED"] as const;
-
-function serializeCharacter(character: {
-  id: bigint;
-  userId: bigint;
-  name: string;
-  realm: string;
-  faction: number | null;
-  spec: number | null;
-  isMain: number;
-  isRetired: number;
-  itemLevel: number | null;
-}) {
-  return {
-    id: character.id.toString(),
-    userId: character.userId.toString(),
-    name: character.name,
-    realm: character.realm,
-    faction: character.faction,
-    specId: character.spec,
-    isMain: character.isMain === 1,
-    isRetired: character.isRetired === 1,
-    itemLevel: character.itemLevel,
-  };
-}
 
 function serializeSignup(
   signup: {
