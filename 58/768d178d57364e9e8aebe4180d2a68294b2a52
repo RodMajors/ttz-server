@@ -1,0 +1,67 @@
+apps/api/src/members/members.module.ts
+  h_1dc22111645538 2,6
+apps/api/src/members/characters.service.ts
+  h_1dc22111645538 1,4,8-11,14-18,22-33,35,37,40-50,53,58-65,67,71-72,76,87-180
+  h_1dc22111645538 181-195
+apps/api/src/warcraft-logs/warcraft-logs.module.ts
+  h_1dc22111645538 3-4,7-11
+packages/database/package.json
+  h_1dc22111645538 12-14
+packages/database/prisma/migrations/20261116000000_character_identity_and_wcl_links/migration.sql
+  h_1dc22111645538 1-67
+  h_1dc22111645538 68-99
+packages/contracts/src/index.ts
+  h_1dc22111645538 121-124,131-139,243,248-276
+  h_1dc22111645538 125-126,140-141,238-239,244-245,277-278,349,381
+apps/api/src/activities/activity-detail.test.ts
+  h_1dc22111645538 41-44,46-49,53-63
+packages/warcraft-logs/src/index.ts
+  h_1dc22111645538 1-5,33-52,63-139,169-181,186,195,217,224,226,228-240
+  h_1dc22111645538 150,154,167-168,184,193-194,211-212,215,222-223,227
+.env.example
+  h_1dc22111645538 11-12
+apps/worker/src/main.ts
+  h_1dc22111645538 28,44
+apps/api/src/warcraft-logs/wcl-auth.controller.ts
+  h_1dc22111645538 1-44
+  h_1dc22111645538 45-49
+apps/api/src/warcraft-logs/warcraft-logs.controller.ts
+  h_1dc22111645538 1-12,19,26,34,37-47,93,114
+apps/api/src/warcraft-logs/warcraft-logs.controller.test.ts
+  h_1dc22111645538 23-27,63,78-82,116-120,138-142
+packages/config/src/index.ts
+  h_1dc22111645538 17-18
+package.json
+  h_1dc22111645538 18-19
+packages/database/prisma/schema.prisma
+  h_1dc22111645538 51-53,105-109,114-120,130-132,136-138,140-142,146-188,566
+README.md
+  h_1dc22111645538 51-52
+  h_1dc22111645538 60-61
+apps/api/src/warcraft-logs/wcl-binding.service.ts
+  h_1dc22111645538 1-239
+  h_1dc22111645538 240-281
+apps/api/src/members/members.controller.ts
+  h_1dc22111645538 4,22,68-72,154-173
+  h_1dc22111645538 146-153
+apps/api/src/attendance/attendance.service.ts
+  h_1dc22111645538 74,89
+apps/api/src/activities/activities.service.ts
+  h_1dc22111645538 5,76-77,243-248,253,269,295-303,321-322,324,326-327,330-345,364,385,518
+  h_1dc22111645538 543,581-592,621
+apps/api/src/warcraft-logs/wcl-binding.service.test.ts
+  h_1dc22111645538 1-147
+packages/warcraft-logs/src/index.test.ts
+  h_1dc22111645538 56-120
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "58768d178d57364e9e8aebe4180d2a68294b2a52",
+  "prompts": {},
+  "humans": {
+    "h_1dc22111645538": {
+      "author": "rodmajors <liangzerui@eccom.com.cn>"
+    }
+  }
+}
