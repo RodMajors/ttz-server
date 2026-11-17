@@ -1,0 +1,16 @@
+apps/api/src/members/characters.service.test.ts
+  h_1dc22111645538 49-62
+apps/api/src/members/characters.service.ts
+  h_1dc22111645538 114,117-121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4edd36d4f49359a3f7803e77bc3c56e931e31d44",
+  "prompts": {},
+  "humans": {
+    "h_1dc22111645538": {
+      "author": "rodmajors <liangzerui@eccom.com.cn>"
+    }
+  }
+}
