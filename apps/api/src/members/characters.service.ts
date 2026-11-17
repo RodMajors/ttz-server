@@ -1,5 +1,5 @@
 import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import type { CreateCharacterInput, UpdateCharacterInput } from "@ttz/contracts";
+import type { CharacterSummary, CreateCharacterInput, UpdateCharacterInput } from "@ttz/contracts";
 import { PrismaService } from "../database/prisma.service";
 import { WclBindingService } from "../warcraft-logs/wcl-binding.service";
 
@@ -172,6 +172,7 @@ export function serializeCharacter(character: {
   faction: number | null;
   guildName: string | null;
   guildServerName: string | null;
+  guildServerSlug: string | null;
   activeSpecName: string | null;
   level: number | null;
   activeTitle: string | null;
@@ -192,7 +193,7 @@ export function serializeCharacter(character: {
     en_name: string | null;
     specs: Array<{ id: number; name: string | null; role: number | null }>;
   };
-}) {
+}): CharacterSummary {
   return {
     id: character.id.toString(),
     userId: character.userId.toString(),
@@ -208,6 +209,7 @@ export function serializeCharacter(character: {
     faction: character.faction,
     guildName: character.guildName,
     guildServerName: character.guildServerName,
+    guildServerSlug: character.guildServerSlug,
     activeSpecName: character.activeSpecName,
     level: character.level,
     activeTitle: character.activeTitle,
@@ -216,7 +218,6 @@ export function serializeCharacter(character: {
     isRetired: character.isRetired === 1,
     itemLevel: character.itemLevel,
     averageItemLevel: character.averageItemLevel,
-    itemLevelUpdatedAt: character.itemLevelUpdatedAt?.toISOString() ?? null,
     lastLoginAt: character.lastLoginAt?.toISOString() ?? null,
     achievementPoints: character.achievementPoints,
     verificationStatus: verificationStatuses[character.wclVerificationStatus] ?? "UNVERIFIED",

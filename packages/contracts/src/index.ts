@@ -127,6 +127,7 @@ export const characterSummarySchema = z.object({
   faction: z.number().int().nullable(),
   guildName: z.string().nullable(),
   guildServerName: z.string().nullable(),
+  guildServerSlug: z.string().nullable(),
   activeSpecName: z.string().nullable(),
   level: z.number().int().nullable(),
   activeTitle: z.string().nullable(),
