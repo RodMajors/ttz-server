@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { Prisma } from "@ttz/database";
 import { WarcraftLogsClient, type WclCharacter, type WclRegion } from "@ttz/warcraft-logs";
 import { PrismaService } from "../database/prisma.service";
 
@@ -92,6 +93,72 @@ export class WclBindingService {
     return this.toCandidate(character);
   }
 
+  async listServers(search?: string) {
+    await this.ensureServerCache();
+    return this.prisma.wclServer.findMany({
+      where: {
+        region: "cn",
+        ...(search?.trim()
+          ? { OR: [{ name: { contains: search.trim() } }, { slug: { contains: search.trim().toLowerCase() } }] }
+          : {}),
+      },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+      take: 50,
+    });
+  }
+
+  async syncReferenceData() {
+    this.requireConfigured();
+    let page = 1;
+    let serverCount = 0;
+    let hasMorePages = true;
+    while (hasMorePages) {
+      const result = await this.client.getChinaServers(page);
+      for (const server of result.data) {
+        await this.prisma.wclServer.upsert({
+          where: { region_slug: { region: "cn", slug: server.slug } },
+          create: {
+            id: server.id,
+            name: server.name,
+            slug: server.slug,
+            region: "cn",
+            blizzardId: server.blizzardID ?? null,
+            connectedRealmId: server.connectedRealmID ?? null,
+          },
+          update: {
+            name: server.name,
+            slug: server.slug,
+            blizzardId: server.blizzardID ?? null,
+            connectedRealmId: server.connectedRealmID ?? null,
+          },
+        });
+      }
+      serverCount += result.data.length;
+      hasMorePages = result.hasMorePages;
+      page += 1;
+      if (page > 20) throw new Error("WCL server pagination exceeded the safety limit");
+    }
+
+    const classDefinitions = await this.client.getClasses(this.region());
+    let specCount = 0;
+    for (const definition of classDefinitions) {
+      const characterClass = await this.prisma.classes.findUnique({ where: { wclId: definition.id } });
+      if (!characterClass) continue;
+      await this.prisma.classes.update({
+        where: { id: characterClass.id },
+        data: { wclSlug: definition.slug, name: definition.name },
+      });
+      for (const spec of definition.specs) {
+        const updated = await this.prisma.specs.updateMany({
+          where: { class: characterClass.id, wclId: spec.id },
+          data: { name: spec.name, wclSlug: spec.slug },
+        });
+        specCount += updated.count;
+      }
+    }
+    return { serverCount, classCount: classDefinitions.length, specCount };
+  }
+
   private async persistClaimedCharacters(
     userId: bigint,
     currentUser: { id: number; name: string; characters: WclCharacter[] },
@@ -100,18 +167,25 @@ export class WclBindingService {
     const now = new Date();
     const existingLink = await this.prisma.wclUserLink.findUnique({ where: { userId } });
     const switchingAccount = Boolean(existingLink && existingLink.wclUserId !== currentUser.id);
-    const claimed = currentUser.characters.filter(
+    const claimedCharacters = currentUser.characters.filter(
       (character) =>
         character.claimed === true &&
         character.server.region?.slug?.toLowerCase() === region.toLowerCase() &&
         character.server.slug &&
         character.server.name,
     );
+    const claimed = (
+      await Promise.all(
+        claimedCharacters.map((character) =>
+          this.client.getCharacter(character.name, character.server.slug, region, this.region()),
+        ),
+      )
+    ).filter((character): character is WclCharacter => Boolean(character));
     const classes = await this.prisma.classes.findMany({
-      where: { id: { in: [...new Set(claimed.map((character) => character.classID))] } },
-      select: { id: true },
+      where: { wclId: { in: [...new Set(claimed.map((character) => character.classID))] } },
+      select: { id: true, wclId: true },
     });
-    const validClasses = new Set(classes.map((entry) => entry.id));
+    const classByWclId = new Map(classes.flatMap((entry) => (entry.wclId == null ? [] : [[entry.wclId, entry.id]])));
     let synced = 0;
     let conflicts = 0;
     await this.prisma.$transaction(async (transaction) => {
@@ -153,7 +227,8 @@ export class WclBindingService {
       });
       let hasMain = Boolean(await transaction.character.findFirst({ where: { userId, isMain: 1 } }));
       for (const character of claimed) {
-        if (!validClasses.has(character.classID)) continue;
+        const localClassId = classByWclId.get(character.classID);
+        if (!localClassId) continue;
         const serverRegion = character.server.region?.slug?.toLowerCase() ?? region;
         const existing = await transaction.character.findFirst({
           where: {
@@ -172,8 +247,8 @@ export class WclBindingService {
           serverName: character.server.name,
           serverSlug: character.server.slug,
           serverRegion,
-          classId: character.classID,
-          faction: factionCode(character.faction?.name),
+          classId: localClassId,
+          ...characterProfile(character),
           wclId: BigInt(character.id),
           wclCanonicalId: BigInt(character.canonicalID),
           wclVerificationStatus: 2,
@@ -202,7 +277,7 @@ export class WclBindingService {
   }
 
   private async requireClass(classId: number) {
-    const characterClass = await this.prisma.classes.findUnique({ where: { id: classId } });
+    const characterClass = await this.prisma.classes.findUnique({ where: { wclId: classId } });
     if (!characterClass) {
       throw new ConflictException({ code: "WCL_CLASS_NOT_CONFIGURED", message: "角色职业基础数据尚未配置" });
     }
@@ -216,14 +291,20 @@ export class WclBindingService {
       realm: character.server.name,
       serverSlug: character.server.slug,
       serverRegion: character.server.region?.slug?.toLowerCase() ?? this.region(),
-      classId: character.classID,
+      classId: characterClass.id,
       className: characterClass.name ?? characterClass.en_name ?? `职业 ${character.classID}`,
-      faction: factionCode(character.faction?.name),
       guildNames: character.guilds?.map((guild) => guild.name) ?? [],
-      level: character.level ?? null,
       wclId: String(character.id),
       wclCanonicalId: String(character.canonicalID),
+      ...characterProfile(character),
     };
+  }
+
+  private async ensureServerCache() {
+    const latest = await this.prisma.wclServer.findFirst({ orderBy: { updatedAt: "desc" } });
+    if (!latest || latest.updatedAt < new Date(Date.now() - 24 * 60 * 60_000)) {
+      await this.syncReferenceData();
+    }
   }
 
   private requireConfigured() {
@@ -278,4 +359,47 @@ function factionCode(name?: string) {
   if (normalized.includes("horde") || normalized.includes("部落")) return 1;
   if (normalized.includes("alliance") || normalized.includes("联盟")) return 0;
   return null;
+}
+
+function characterProfile(character: WclCharacter) {
+  const raw = asRecord(character.gameData);
+  const global = asRecord(raw?.global);
+  const guild = asRecord(global?.guild);
+  const guildRealm = asRecord(guild?.realm);
+  const faction = asRecord(global?.faction);
+  const race = asRecord(global?.race);
+  const gender = asRecord(global?.gender);
+  const activeSpec = asRecord(global?.active_spec);
+  const equippedItemLevel = numberValue(global?.equipped_item_level);
+  const lastLoginTimestamp = numberValue(global?.last_login_timestamp);
+  return {
+    faction: factionCode(stringValue(faction?.name) ?? character.faction?.name),
+    raceName: stringValue(race?.name),
+    gender: stringValue(gender?.name) ?? stringValue(gender?.type),
+    guildName: stringValue(guild?.name),
+    guildServerName: stringValue(guildRealm?.name),
+    guildServerSlug: stringValue(guildRealm?.slug),
+    activeSpecName: stringValue(activeSpec?.name),
+    level: numberValue(global?.level) ?? character.level ?? null,
+    activeTitle: stringValue(asRecord(global?.active_title)?.name),
+    serverTypeName: stringValue(global?.server_type_name),
+    itemLevel: equippedItemLevel,
+    averageItemLevel: numberValue(global?.average_item_level),
+    itemLevelUpdatedAt: equippedItemLevel == null ? null : new Date(),
+    lastLoginAt: lastLoginTimestamp == null ? null : new Date(lastLoginTimestamp),
+    achievementPoints: numberValue(global?.achievement_points),
+    gameData: raw ? (raw as Prisma.InputJsonValue) : Prisma.DbNull,
+  };
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function numberValue(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? Math.trunc(value) : null;
 }

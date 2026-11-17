@@ -10,7 +10,8 @@
     "check": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "seed:local-admin": "tsx --env-file=../../.env scripts/seed-local-admin.ts"
+    "seed:local-admin": "tsx --env-file=../../.env scripts/seed-local-admin.ts",
+    "sync:wcl-reference-data": "tsx --env-file=../../.env scripts/sync-wcl-reference-data.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.6",

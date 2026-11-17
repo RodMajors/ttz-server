@@ -17,9 +17,10 @@ import {
   registerWclReportSchema,
   wclActorMappingSchema,
   wclCharacterSearchSchema,
+  wclServerQuerySchema,
 } from "@ttz/contracts";
 import { attendanceCodeToStatus, attendanceStatusToCode } from "../activities/activity.constants";
-import { CurrentUser } from "../auth/auth.decorators";
+import { CurrentUser, MinPrivilege } from "../auth/auth.decorators";
 import type { AuthUser } from "../auth/auth.types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { PrismaService } from "../database/prisma.service";
@@ -35,14 +36,30 @@ export class WarcraftLogsController {
   ) {}
 
   @Get("wcl/characters")
-  searchCharacter(
+  async searchCharacter(
     @Query(new ZodValidationPipe(wclCharacterSearchSchema)) query: {
       name: string;
       serverSlug: string;
       serverRegion: string;
     },
   ) {
-    return this.binding.searchCharacter(query.name, query.serverSlug, query.serverRegion);
+    const { gameData: _gameData, ...candidate } = await this.binding.searchCharacter(
+      query.name,
+      query.serverSlug,
+      query.serverRegion,
+    );
+    return candidate;
+  }
+
+  @Get("wcl/servers")
+  listServers(@Query(new ZodValidationPipe(wclServerQuerySchema)) query: { search?: string }) {
+    return this.binding.listServers(query.search);
+  }
+
+  @Post("wcl/reference-data/sync")
+  @MinPrivilege(1)
+  syncReferenceData() {
+    return this.binding.syncReferenceData();
   }
 
   @Post("activities/:id/wcl-reports")

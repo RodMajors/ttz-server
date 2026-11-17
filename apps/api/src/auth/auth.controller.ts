@@ -40,7 +40,7 @@ export class AuthController {
   @Post("local-dev-login")
   async localDevLogin(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
     if (!isLoopbackRequest(request)) throw new NotFoundException();
-    const result = await this.auth.loginWithLocalDevAccount();
+    const result = await this.auth.loginWithLocalDevAccount(0);
     setSessionCookie(response, result.accessToken);
     return result.user;
   }
@@ -49,7 +49,7 @@ export class AuthController {
   @Post("local-dev-token")
   async localDevToken(@Req() request: Request) {
     if (!isLoopbackRequest(request)) throw new NotFoundException();
-    return this.auth.loginWithLocalDevAccount();
+    return this.auth.loginWithLocalDevAccount(1);
   }
 
   @Public()

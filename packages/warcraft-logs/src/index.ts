@@ -41,6 +41,22 @@ export interface WclCharacter {
   faction?: { id: number; name: string } | null;
   server: { id?: number; slug: string; name: string; region?: { slug: string; name: string } | null };
   guilds?: Array<{ id: number; name: string }> | null;
+  gameData?: unknown;
+}
+
+export interface WclServer {
+  id: number;
+  name: string;
+  slug: string;
+  blizzardID?: number | null;
+  connectedRealmID?: number | null;
+}
+
+export interface WclClassDefinition {
+  id: number;
+  name: string;
+  slug: string;
+  specs: Array<{ id: number; name: string; slug: string }>;
 }
 
 export interface WclCurrentUser {
@@ -126,6 +142,7 @@ export class WarcraftLogsClient {
       " faction { id name }",
       " server { id slug name region { slug name } }",
       " guilds { id name }",
+      " gameData",
       " } }",
       "}",
     ].join(" ");
@@ -135,6 +152,27 @@ export class WarcraftLogsClient {
       serverRegion,
     });
     return data.characterData.character;
+  }
+
+  async getChinaServers(page = 1): Promise<{ data: WclServer[]; hasMorePages: boolean }> {
+    const query = [
+      "query TTZChinaServers($page: Int) {",
+      " worldData { region(id: 5) { servers(limit: 400, page: $page) {",
+      " data { id name slug blizzardID connectedRealmID } has_more_pages",
+      " } } }",
+      "}",
+    ].join(" ");
+    const result = await this.graphqlClient<{
+      worldData: { region: { servers: { data: WclServer[]; has_more_pages: boolean } } | null };
+    }>("cn", query, { page });
+    const servers = result.worldData.region?.servers;
+    return { data: servers?.data ?? [], hasMorePages: servers?.has_more_pages ?? false };
+  }
+
+  async getClasses(region: WclRegion = "cn"): Promise<WclClassDefinition[]> {
+    const query = "query TTZClasses { gameData { classes { id name slug specs { id name slug } } } }";
+    const result = await this.graphqlClient<{ gameData: { classes: WclClassDefinition[] } }>(region, query, {});
+    return result.gameData.classes;
   }
 
   async getReport(code: string): Promise<WclReportData> {

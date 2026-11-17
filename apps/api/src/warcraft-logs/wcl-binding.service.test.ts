@@ -36,7 +36,7 @@ describe("WclBindingService", () => {
         }),
       },
       wclUserLink: { findUnique: vi.fn().mockResolvedValue(null) },
-      classes: { findMany: vi.fn().mockResolvedValue([{ id: 10 }]) },
+      classes: { findMany: vi.fn().mockResolvedValue([{ id: 9, wclId: 10 }]) },
       $transaction: vi.fn(async (callback: (tx: typeof transaction) => unknown) => callback(transaction)),
     };
     const currentUser: WclCurrentUser = {
@@ -54,6 +54,9 @@ describe("WclBindingService", () => {
       tokenType: "Bearer",
     });
     vi.spyOn(WarcraftLogsClient.prototype, "getCurrentUser").mockResolvedValue(currentUser);
+    vi.spyOn(WarcraftLogsClient.prototype, "getCharacter").mockImplementation(
+      async (name) => currentUser.characters.find((character) => character.name === name) ?? null,
+    );
     const originalClientId = process.env.WCL_CLIENT_ID;
     const originalClientSecret = process.env.WCL_CLIENT_SECRET;
     const originalRegion = process.env.WCL_REGION;
@@ -84,7 +87,12 @@ describe("WclBindingService", () => {
           name: "Veliotha",
           serverSlug: "anzu",
           serverRegion: "cn",
-          classId: 10,
+          classId: 9,
+          raceName: "暗夜精灵",
+          guildName: "TheTwilightZone",
+          activeSpecName: "痛苦",
+          itemLevel: 334,
+          averageItemLevel: 335,
           wclId: 101n,
           wclCanonicalId: 1001n,
           wclVerificationStatus: 2,
@@ -137,6 +145,18 @@ function claimedCharacter(input: { id: number; canonicalID: number; name: string
       slug: "anzu",
       name: "安苏",
       region: { slug: input.region, name: input.region },
+    },
+    gameData: {
+      global: {
+        race: { name: "暗夜精灵" },
+        gender: { name: "女性" },
+        guild: { name: "TheTwilightZone", realm: { name: "伊森利恩", slug: "isillien" } },
+        active_spec: { name: "痛苦" },
+        level: 90,
+        equipped_item_level: 334,
+        average_item_level: 335,
+        achievement_points: 2900,
+      },
     },
   };
 }

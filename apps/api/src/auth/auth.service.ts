@@ -33,7 +33,7 @@ export class AuthService {
     return { ...(await this.issueSession(user.id, 1, true)), user: this.toAuthUser(user) };
   }
 
-  async loginWithLocalDevAccount() {
+  async loginWithLocalDevAccount(kind: 0 | 1 = 1) {
     if (process.env.NODE_ENV !== "development" || process.env.ALLOW_LOCAL_DEV_LOGIN !== "true") {
       throw new NotFoundException();
     }
@@ -41,7 +41,7 @@ export class AuthService {
     if (!user || user.status !== 1 || user.isApproved !== 1) {
       throw new ConflictException({ code: "LOCAL_DEV_ACCOUNT_NOT_SEEDED", message: "请先创建本地开发管理员账号" });
     }
-    return { ...(await this.issueSession(user.id, 1, true)), user: this.toAuthUser(user) };
+    return { ...(await this.issueSession(user.id, kind, kind === 1)), user: this.toAuthUser(user) };
   }
 
   async refresh(refreshToken: string) {
@@ -101,7 +101,6 @@ export class AuthService {
       where: { id: user.id },
       data: {
         name: input.name,
-        wxNickname: input.wxNickname,
         guildNickname: input.guildNickname,
         ...(user.approvalStatus === "REJECTED"
           ? { isApproved: 0, rejectReason: null, reviewedBy: null, reviewedAt: null }
@@ -261,7 +260,7 @@ export class AuthService {
       isApproved: user.isApproved === 1,
       approvalStatus: (["PENDING", "APPROVED", "REJECTED"] as const)[user.isApproved] ?? "PENDING",
       rejectReason: user.rejectReason ?? null,
-      profileComplete: Boolean(user.wxNickname && user.guildNickname),
+      profileComplete: Boolean(user.guildNickname),
       status: user.status,
     };
   }

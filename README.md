@@ -64,6 +64,8 @@ pnpm dev
 
 API 默认监听 `http://localhost:3001/api`，非生产 Swagger 位于 `/api/docs`。
 
+`pnpm wcl:sync-reference-data` 会分页同步国服 WCL 服务器列表，并刷新职业/专精 WCL ID 映射；可由部署环境按日定时执行。普通服务器查询在缓存为空或超过 24 小时时也会自动触发同步。
+
 ## 运行和构建
 
 ```bash
@@ -71,6 +73,7 @@ pnpm typecheck
 pnpm test
 pnpm build
 pnpm db:validate
+pnpm wcl:sync-reference-data
 
 pnpm --filter @ttz/api start
 pnpm --filter @ttz/worker start

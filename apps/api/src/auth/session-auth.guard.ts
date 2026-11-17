@@ -74,7 +74,7 @@ function toAuthUser(user: {
     isApproved: user.isApproved === 1,
     approvalStatus: (["PENDING", "APPROVED", "REJECTED"] as const)[user.isApproved] ?? "PENDING",
     rejectReason: user.rejectReason ?? null,
-    profileComplete: Boolean(user.wxNickname && user.guildNickname),
+    profileComplete: Boolean(user.guildNickname),
     status: user.status,
   };
 }

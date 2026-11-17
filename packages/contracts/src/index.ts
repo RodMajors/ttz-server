@@ -19,7 +19,6 @@ export type WechatCodeLoginInput = z.infer<typeof wechatCodeLoginSchema>;
 
 export const memberProfileSchema = z.object({
   name: z.string().trim().min(1).max(255).nullable().optional(),
-  wxNickname: z.string().trim().min(1).max(255),
   guildNickname: z.string().trim().min(1).max(255),
 });
 export type MemberProfileInput = z.infer<typeof memberProfileSchema>;
@@ -124,7 +123,17 @@ export const characterSummarySchema = z.object({
   className: z.string(),
   raceId: z.number().int().nullable(),
   raceName: z.string().nullable(),
+  gender: z.string().nullable(),
   faction: z.number().int().nullable(),
+  guildName: z.string().nullable(),
+  guildServerName: z.string().nullable(),
+  activeSpecName: z.string().nullable(),
+  level: z.number().int().nullable(),
+  activeTitle: z.string().nullable(),
+  serverTypeName: z.string().nullable(),
+  averageItemLevel: z.number().int().nullable(),
+  lastLoginAt: isoDateTimeSchema.nullable(),
+  achievementPoints: z.number().int().nullable(),
   isMain: z.boolean(),
   isRetired: z.boolean(),
   itemLevel: z.number().int().nullable(),
@@ -268,8 +277,35 @@ export const wclCharacterCandidateSchema = z.object({
   faction: z.number().int().nullable(),
   guildNames: z.array(z.string()),
   level: z.number().int().nullable(),
+  raceName: z.string().nullable(),
+  gender: z.string().nullable(),
+  guildName: z.string().nullable(),
+  guildServerName: z.string().nullable(),
+  guildServerSlug: z.string().nullable(),
+  activeSpecName: z.string().nullable(),
+  activeTitle: z.string().nullable(),
+  serverTypeName: z.string().nullable(),
+  itemLevel: z.number().int().nullable(),
+  averageItemLevel: z.number().int().nullable(),
+  lastLoginAt: isoDateTimeSchema.nullable(),
+  achievementPoints: z.number().int().nullable(),
   wclId: idSchema,
   wclCanonicalId: idSchema,
+});
+export const wclServerQuerySchema = z.object({ search: z.string().trim().max(64).optional() });
+export const wclServerSchema = z.object({
+  id: z.number().int(),
+  name: z.string(),
+  slug: z.string(),
+  region: z.string(),
+  blizzardId: z.number().int().nullable(),
+  connectedRealmId: z.number().int().nullable(),
+});
+export const wclServerListSchema = z.array(wclServerSchema);
+export const wclReferenceSyncResultSchema = z.object({
+  serverCount: z.number().int(),
+  classCount: z.number().int(),
+  specCount: z.number().int(),
 });
 export const characterVerificationDecisionSchema = z.object({
   approved: z.boolean(),

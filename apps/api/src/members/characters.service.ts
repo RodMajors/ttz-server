@@ -43,6 +43,21 @@ export class CharactersService {
           serverRegion: candidate.serverRegion,
           classId: candidate.classId,
           faction: candidate.faction,
+          raceName: candidate.raceName,
+          gender: candidate.gender,
+          guildName: candidate.guildName,
+          guildServerName: candidate.guildServerName,
+          guildServerSlug: candidate.guildServerSlug,
+          activeSpecName: candidate.activeSpecName,
+          level: candidate.level,
+          activeTitle: candidate.activeTitle,
+          serverTypeName: candidate.serverTypeName,
+          itemLevel: candidate.itemLevel,
+          averageItemLevel: candidate.averageItemLevel,
+          itemLevelUpdatedAt: candidate.itemLevel == null ? null : new Date(),
+          lastLoginAt: candidate.lastLoginAt ? new Date(candidate.lastLoginAt) : null,
+          achievementPoints: candidate.achievementPoints,
+          gameData: candidate.gameData,
           wclId: BigInt(candidate.wclId),
           wclCanonicalId: BigInt(candidate.wclCanonicalId),
           wclVerificationStatus: 1,
@@ -152,7 +167,15 @@ export function serializeCharacter(character: {
   classId: number;
   raceId: number | null;
   race: { name: string } | null;
+  raceName: string | null;
+  gender: string | null;
   faction: number | null;
+  guildName: string | null;
+  guildServerName: string | null;
+  activeSpecName: string | null;
+  level: number | null;
+  activeTitle: string | null;
+  serverTypeName: string | null;
   isMain: number;
   isRetired: number;
   wclId: bigint;
@@ -160,7 +183,10 @@ export function serializeCharacter(character: {
   wclVerificationStatus: number;
   wclEvidence: string | null;
   itemLevel: number | null;
+  averageItemLevel: number | null;
   itemLevelUpdatedAt: Date | null;
+  lastLoginAt: Date | null;
+  achievementPoints: number | null;
   characterClass: {
     name: string | null;
     en_name: string | null;
@@ -177,12 +203,22 @@ export function serializeCharacter(character: {
     classId: character.classId,
     className: character.characterClass.name ?? character.characterClass.en_name ?? `职业 ${character.classId}`,
     raceId: character.raceId,
-    raceName: character.race?.name ?? null,
+    raceName: character.raceName ?? character.race?.name ?? null,
+    gender: character.gender,
     faction: character.faction,
+    guildName: character.guildName,
+    guildServerName: character.guildServerName,
+    activeSpecName: character.activeSpecName,
+    level: character.level,
+    activeTitle: character.activeTitle,
+    serverTypeName: character.serverTypeName,
     isMain: character.isMain === 1,
     isRetired: character.isRetired === 1,
     itemLevel: character.itemLevel,
+    averageItemLevel: character.averageItemLevel,
     itemLevelUpdatedAt: character.itemLevelUpdatedAt?.toISOString() ?? null,
+    lastLoginAt: character.lastLoginAt?.toISOString() ?? null,
+    achievementPoints: character.achievementPoints,
     verificationStatus: verificationStatuses[character.wclVerificationStatus] ?? "UNVERIFIED",
     verificationEvidence: character.wclEvidence,
     wclId: character.wclId.toString(),

@@ -118,6 +118,45 @@ describe("WarcraftLogsClient", () => {
       headers: expect.objectContaining({ authorization: "Bearer user-token" }),
     });
   });
+
+  it("queries CN servers and WCL class/spec reference data", async () => {
+    const request = vi.fn<typeof fetch>().mockImplementation(async (url, init) => {
+      if (url === "https://www.warcraftlogs.com/oauth/token") {
+        return jsonResponse({ access_token: "secret-token", expires_in: 3600 });
+      }
+      const body = JSON.parse(String(init?.body)) as { query: string };
+      if (body.query.includes("TTZChinaServers")) {
+        return jsonResponse({
+          data: {
+            worldData: {
+              region: {
+                servers: {
+                  data: [{ id: 569, name: "安苏", slug: "anzu", blizzardID: 1933, connectedRealmID: 111 }],
+                  has_more_pages: false,
+                },
+              },
+            },
+          },
+        });
+      }
+      return jsonResponse({
+        data: {
+          gameData: {
+            classes: [{ id: 10, name: "术士", slug: "Warlock", specs: [{ id: 1, name: "痛苦", slug: "Affliction" }] }],
+          },
+        },
+      });
+    });
+    const client = new WarcraftLogsClient("client-id", "client-secret", request);
+
+    await expect(client.getChinaServers()).resolves.toEqual({
+      data: [{ id: 569, name: "安苏", slug: "anzu", blizzardID: 1933, connectedRealmID: 111 }],
+      hasMorePages: false,
+    });
+    await expect(client.getClasses()).resolves.toEqual([
+      { id: 10, name: "术士", slug: "Warlock", specs: [{ id: 1, name: "痛苦", slug: "Affliction" }] },
+    ]);
+  });
 });
 
 function jsonResponse(payload: unknown) {

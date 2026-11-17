@@ -108,6 +108,19 @@ model Character {
   classId                  Int                       @map("class_id")
   raceId                   Int?                      @map("race_id")
   faction                  Int?                      @db.TinyInt
+  raceName                 String?                   @map("race_name") @db.VarChar(64)
+  gender                   String?                   @db.VarChar(16)
+  guildName                String?                   @map("guild_name") @db.VarChar(128)
+  guildServerName          String?                   @map("guild_server_name") @db.VarChar(64)
+  guildServerSlug          String?                   @map("guild_server_slug") @db.VarChar(64)
+  activeSpecName           String?                   @map("active_spec_name") @db.VarChar(64)
+  level                    Int?
+  activeTitle              String?                   @map("active_title") @db.VarChar(128)
+  serverTypeName           String?                   @map("server_type_name") @db.VarChar(64)
+  averageItemLevel         Int?                      @map("average_item_level")
+  lastLoginAt              DateTime?                 @map("last_login_at") @db.DateTime(0)
+  achievementPoints        Int?                      @map("achievement_points")
+  gameData                 Json?                     @map("game_data")
   isMain                   Int                       @default(0) @map("is_main") @db.TinyInt
   isRetired                Int                       @default(0) @map("is_retired") @db.TinyInt
   remark                   String?                   @db.VarChar(255)
@@ -184,6 +197,21 @@ model Race {
   characters Character[]
 
   @@map("races")
+}
+
+model WclServer {
+  id               Int      @id
+  name             String   @db.VarChar(64)
+  slug             String   @db.VarChar(64)
+  region           String   @default("cn") @db.VarChar(16)
+  blizzardId       Int?     @map("blizzard_id")
+  connectedRealmId Int?     @map("connected_realm_id")
+  createdAt        DateTime @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
+
+  @@unique([region, slug], map: "uk_wcl_server_region_slug")
+  @@index([name], map: "idx_wcl_server_name")
+  @@map("wcl_servers")
 }
 
 model ActivityType {
@@ -557,6 +585,8 @@ model bosses {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model classes {
   id          Int     @id @default(autoincrement())
+  wclId       Int?    @unique(map: "uk_classes_wcl_id") @map("wcl_id")
+  wclSlug     String? @map("wcl_slug") @db.VarChar(32)
   name        String? @db.VarChar(25)
   en_name     String? @db.VarChar(25)
   icon        String? @db.VarChar(255)
@@ -629,6 +659,8 @@ model raids {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model specs {
   id                      Int                    @id @default(autoincrement())
+  wclId                   Int?                   @map("wcl_id")
+  wclSlug                 String?                @map("wcl_slug") @db.VarChar(32)
   name                    String?                @db.VarChar(25)
   class                   Int
   role                    Int?
@@ -640,4 +672,5 @@ model specs {
   classes                 classes                @relation(fields: [class], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "specs_classes_id_fk")
 
   @@index([class], map: "specs_classes_id_fk")
+  @@unique([class, wclId], map: "uk_specs_class_wcl_id")
 }

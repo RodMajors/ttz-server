@@ -31,6 +31,30 @@ describe("AuthService QR session state machine", () => {
     vi.unstubAllEnvs();
   });
 
+  it("issues a long-lived cookie session for local web development", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("ALLOW_LOCAL_DEV_LOGIN", "true");
+    const user = {
+      id: 7n,
+      name: "Local Admin",
+      wxNickname: "TTZ Local Dev",
+      guildNickname: "Local Admin",
+      privilege: 2,
+      isApproved: 1,
+      status: 1,
+    };
+    const create = vi.fn().mockImplementation(({ data }) => ({ id: 12n, ...data }));
+    const service = createService({ user: { findUnique: vi.fn().mockResolvedValue(user) }, authSession: { create } });
+
+    const result = await service.loginWithLocalDevAccount(0);
+
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ userId: 7n, kind: 0, refreshTokenHash: null }),
+    });
+    expect(new Date(result.accessExpiresAt).getTime()).toBeGreaterThan(Date.now() + 6 * 24 * 60 * 60_000);
+    vi.unstubAllEnvs();
+  });
+
   it("returns a rejected profile to pending review when the member updates it", async () => {
     const update = vi.fn().mockResolvedValue({
       id: 7n,
@@ -46,7 +70,7 @@ describe("AuthService QR session state machine", () => {
 
     const result = await service.updateProfile(
       { ...member(), approvalStatus: "REJECTED", rejectReason: "资料不完整" },
-      { name: "Updated", guildNickname: "TTZ Updated", wxNickname: "WeChat Updated" },
+      { name: "Updated", guildNickname: "TTZ Updated" },
     );
 
     expect(update).toHaveBeenCalledWith({
@@ -54,7 +78,6 @@ describe("AuthService QR session state machine", () => {
       data: {
         name: "Updated",
         guildNickname: "TTZ Updated",
-        wxNickname: "WeChat Updated",
         isApproved: 0,
         rejectReason: null,
         reviewedBy: null,
