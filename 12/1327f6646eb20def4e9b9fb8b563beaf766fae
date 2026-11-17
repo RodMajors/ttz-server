@@ -1,0 +1,24 @@
+README.md
+  h_1dc22111645538 99,101
+package.json
+  h_1dc22111645538 20
+packages/database/package.json
+  h_1dc22111645538 14-15
+packages/database/prisma/migrations/20261112234500_auth_sessions/migration.sql
+  h_1dc22111645538 1-25
+packages/database/prisma/migrations/20261113010000_wcl_attendance_suggestions/migration.sql
+  h_1dc22111645538 1-21
+packages/database/prisma/migrations/20261113020000_attendance_manual_confirmation/migration.sql
+  h_1dc22111645538 1-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "121327f6646eb20def4e9b9fb8b563beaf766fae",
+  "prompts": {},
+  "humans": {
+    "h_1dc22111645538": {
+      "author": "rodmajors <liangzerui@eccom.com.cn>"
+    }
+  }
+}
