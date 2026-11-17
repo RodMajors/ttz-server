@@ -1,0 +1,18 @@
+apps/api/src/members/characters.service.test.ts
+  h_1dc22111645538 1-48
+apps/api/src/members/characters.service.ts
+  h_1dc22111645538 2,175,196,212
+packages/contracts/src/index.ts
+  h_1dc22111645538 130
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "688d0eaa85100dc6e907400e7ed8745bc2b90260",
+  "prompts": {},
+  "humans": {
+    "h_1dc22111645538": {
+      "author": "rodmajors <liangzerui@eccom.com.cn>"
+    }
+  }
+}
