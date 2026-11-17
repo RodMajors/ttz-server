@@ -1,0 +1,46 @@
+README.md
+  h_1dc22111645538 67-68,76
+apps/api/package.json
+  h_1dc22111645538 13-14
+apps/api/scripts/sync-wcl-reference-data.ts
+  h_1dc22111645538 1-15
+apps/api/src/auth/auth.controller.ts
+  h_1dc22111645538 43,52
+apps/api/src/auth/auth.service.test.ts
+  h_1dc22111645538 34-57,73
+apps/api/src/auth/auth.service.ts
+  h_1dc22111645538 36,44,263
+apps/api/src/auth/session-auth.guard.ts
+  h_1dc22111645538 77
+apps/api/src/members/characters.service.ts
+  h_1dc22111645538 46-60,170-171,173-178,186,188-189,206-207,209-214,218,220-221
+apps/api/src/warcraft-logs/warcraft-logs.controller.ts
+  h_1dc22111645538 20,23,39,46-62
+apps/api/src/warcraft-logs/wcl-binding.service.test.ts
+  h_1dc22111645538 39,57-59,90-95,149-160
+apps/api/src/warcraft-logs/wcl-binding.service.ts
+  h_1dc22111645538 3,96-161,170,177-183,185-186,188,230-231,250-251,280,294,299,303-309,363-405
+package.json
+  h_1dc22111645538 21
+packages/contracts/src/index.ts
+  h_1dc22111645538 126,128-136,280-291,295-309
+packages/database/prisma/migrations/20261117000000_wcl_reference_data_and_character_profile/migration.sql
+  h_1dc22111645538 1-93
+packages/database/prisma/schema.prisma
+  h_1dc22111645538 111-123,202-216,588-589,662-663,675
+packages/warcraft-logs/src/index.test.ts
+  h_1dc22111645538 121-159
+packages/warcraft-logs/src/index.ts
+  h_1dc22111645538 44-59,145,157-177
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "134171fe9d7ebbbed25c9010f84984f424066414",
+  "prompts": {},
+  "humans": {
+    "h_1dc22111645538": {
+      "author": "rodmajors <liangzerui@eccom.com.cn>"
+    }
+  }
+}
