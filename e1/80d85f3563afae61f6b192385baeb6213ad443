@@ -1,0 +1,24 @@
+apps/api/src/members/characters.service.test.ts
+  h_1dc22111645538 2-49,65
+apps/api/src/members/characters.service.ts
+  h_1dc22111645538 2,72,74,78-97
+apps/api/src/members/members.controller.ts
+  h_1dc22111645538 125-127
+apps/api/src/warcraft-logs/wcl-binding.service.test.ts
+  h_1dc22111645538 91,143,154
+apps/api/src/warcraft-logs/wcl-binding.service.ts
+  h_1dc22111645538 356-362,377
+packages/database/prisma/migrations/20261117010000_correct_faction_and_column_comments/migration.sql
+  h_1dc22111645538 1-252
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e180d85f3563afae61f6b192385baeb6213ad443",
+  "prompts": {},
+  "humans": {
+    "h_1dc22111645538": {
+      "author": "rodmajors <liangzerui@eccom.com.cn>"
+    }
+  }
+}
