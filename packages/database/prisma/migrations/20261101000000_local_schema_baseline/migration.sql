@@ -219,7 +219,6 @@ CREATE TABLE `attendance_records` (
   `recorded_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  `manually_confirmed` tinyint(1) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_attendance_activity_user` (`activity_id`,`user_id`),
   KEY `idx_attendance_user_time` (`user_id`,`recorded_at`),
@@ -239,28 +238,6 @@ CREATE TABLE `attendance_records` (
   CONSTRAINT `chk_attendance_source` CHECK ((`source` in (0,1,2))),
   CONSTRAINT `chk_attendance_status_v2` CHECK ((`status` in (0,1,2,3,4,5,6)))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='活动出勤事实记录';
-/*!40101 SET character_set_client = @saved_cs_client */;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `auth_sessions` (
-  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `user_id` bigint unsigned NOT NULL,
-  `access_token_hash` char(64) NOT NULL,
-  `refresh_token_hash` char(64) DEFAULT NULL,
-  `kind` tinyint NOT NULL DEFAULT '0' COMMENT '0 web cookie, 1 miniapp token',
-  `access_expires_at` datetime NOT NULL,
-  `refresh_expires_at` datetime DEFAULT NULL,
-  `revoked_at` datetime DEFAULT NULL,
-  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_auth_session_access` (`access_token_hash`),
-  UNIQUE KEY `uk_auth_session_refresh` (`refresh_token_hash`),
-  KEY `idx_auth_session_user` (`user_id`,`revoked_at`),
-  KEY `idx_auth_session_refresh_expiry` (`refresh_expires_at`),
-  CONSTRAINT `fk_auth_session_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `chk_auth_session_kind` CHECK ((`kind` in (0,1)))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
@@ -381,7 +358,6 @@ CREATE TABLE `login_session` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `login_no` varchar(64) NOT NULL COMMENT '登录流水号，前端生成/后端生成，二维码里带这个',
   `nonce_hash` char(64) DEFAULT NULL COMMENT '二维码随机值 SHA-256',
-  `browser_secret_hash` char(64) DEFAULT NULL,
   `openid` varchar(128) DEFAULT NULL COMMENT '扫码后回填openid，未扫码为NULL',
   `user_id` bigint unsigned DEFAULT NULL COMMENT '扫码用户 user.id',
   `status` tinyint NOT NULL DEFAULT '0' COMMENT '0待扫码 1已扫码待确认 2登录成功 3超时失效 4已取消',
@@ -515,30 +491,6 @@ CREATE TABLE `users` (
   CONSTRAINT `chk_users_approval` CHECK ((`is_approved` in (0,1,2))),
   CONSTRAINT `chk_users_privilege` CHECK ((`privilege` in (0,1,2)))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='公会微信用户表';
-/*!40101 SET character_set_client = @saved_cs_client */;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `wcl_attendance_suggestions` (
-  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `report_id` bigint unsigned NOT NULL,
-  `user_id` bigint unsigned NOT NULL,
-  `character_id` bigint unsigned DEFAULT NULL,
-  `status` tinyint NOT NULL DEFAULT '1',
-  `applied_at` datetime DEFAULT NULL,
-  `applied_by` bigint unsigned DEFAULT NULL,
-  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_wcl_suggestion_report_user` (`report_id`,`user_id`),
-  KEY `idx_wcl_suggestion_user` (`user_id`,`applied_at`),
-  KEY `fk_wcl_suggestion_character` (`character_id`),
-  KEY `fk_wcl_suggestion_applied_by` (`applied_by`),
-  CONSTRAINT `fk_wcl_suggestion_applied_by` FOREIGN KEY (`applied_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `fk_wcl_suggestion_character` FOREIGN KEY (`character_id`) REFERENCES `characters` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `fk_wcl_suggestion_report` FOREIGN KEY (`report_id`) REFERENCES `wcl_reports` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_wcl_suggestion_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT,
-  CONSTRAINT `chk_wcl_suggestion_status` CHECK ((`status` between 0 and 6))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;

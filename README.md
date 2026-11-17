@@ -96,9 +96,9 @@ API 输出 `apps/api/dist/server.cjs`，Worker 输出 `apps/worker/dist/worker.c
 
 Prisma schema 还映射 MVP 草案中的 `announcements`、`announcement_groups` 和 `site_settings`。映射不等于创建表。若基础 `TTZ-MVP-数据库变更草案.sql` 尚未完整执行，公告/公开设置接口会在运行时失败；部署前必须使用 `INFORMATION_SCHEMA` 核对真实表与字段。
 
-本地开发数据库最初由维护者手工建表，因此没有 `_prisma_migrations`。当前 `packages/database/prisma/migrations/20261101000000_local_schema_baseline` 是从本地 `ttz` 库导出的 27 张表纯结构快照，不含业务行或本地自增计数；现有本地库已通过 `prisma migrate resolve --applied` 登记此 baseline，Prisma schema 与该库结构保持一致。
+本地开发数据库最初由维护者手工建表，因此 `_prisma_migrations` 使用纯结构 baseline，并保留 baseline 后的三条增量 migration。对已有手工库需核对实际结构与 baseline 一致后再执行 `pnpm db:migrate:baseline`；该命令只登记 schema baseline，不执行基线建表语句。
 
-原有三条增量 migration 已移至 `packages/database/prisma/legacy-migrations` 归档，因为它们的结构已包含在本地快照中，不应再由新迁移链重复执行。后续数据库变更从 baseline 之后新增普通 Prisma migration。
+baseline 后的增量 migration 是 `auth_sessions`、WCL 出勤建议和手工出勤确认，保持在正常迁移链中。后续结构变更从它们之后新增普通 Prisma migration。
 
 全新空库可使用 `prisma migrate deploy` 建立 baseline；已有手工建好的数据库必须先核对结构与 schema 完全一致，再使用 `prisma migrate resolve --applied <baseline-name>` 登记，不能先对其运行 `migrate deploy`。`_prisma_migrations` 是 Prisma 创建和维护的迁移元数据表，不含业务数据。生产环境仍须先备份并在结构副本演练；不得将本机数据库凭据或本地数据快照带入生产流程。
 

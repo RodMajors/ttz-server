@@ -17,6 +17,7 @@
     "db:validate": "pnpm --filter @ttz/database check",
     "db:migrate": "pnpm --filter @ttz/database migrate:dev",
     "db:migrate:status": "pnpm --filter @ttz/database migrate:status",
+    "db:migrate:baseline": "pnpm --filter @ttz/database migrate:baseline",
     "prepare": "husky"
   },
   "devDependencies": {
