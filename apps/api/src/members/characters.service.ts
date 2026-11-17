@@ -111,10 +111,14 @@ export class CharactersService {
 
   async retire(userId: bigint, characterId: bigint) {
     const result = await this.prisma.character.updateMany({
-      where: { id: characterId, userId },
+      where: { id: characterId, userId, isRetired: 0 },
       data: { isRetired: 1, isMain: 0 },
     });
-    if (!result.count) throw new NotFoundException({ code: "CHARACTER_NOT_FOUND", message: "角色不存在" });
+    if (!result.count) {
+      const character = await this.prisma.character.findFirst({ where: { id: characterId, userId } });
+      if (!character) throw new NotFoundException({ code: "CHARACTER_NOT_FOUND", message: "角色不存在" });
+      throw new ConflictException({ code: "CHARACTER_ALREADY_RETIRED", message: "该角色已经退役" });
+    }
     return { retired: true };
   }
 

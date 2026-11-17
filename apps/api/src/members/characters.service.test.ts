@@ -46,6 +46,20 @@ describe("CharactersService", () => {
     });
     expect(findUniqueOrThrow).toHaveBeenCalledWith({ where: { id: 1n }, include: expect.any(Object) });
   });
+
+  it("rejects retiring an already retired role", async () => {
+    const prisma = {
+      character: {
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        findFirst: vi.fn().mockResolvedValue({ id: 1n, userId: 2n, isRetired: 1 }),
+      },
+    };
+    const service = new CharactersService(prisma as unknown as PrismaService, {} as WclBindingService);
+
+    await expect(service.retire(2n, 1n)).rejects.toMatchObject({
+      response: { code: "CHARACTER_ALREADY_RETIRED", message: "该角色已经退役" },
+    });
+  });
 });
 
 describe("serializeCharacter", () => {
