@@ -353,11 +353,13 @@ function decryptVerifier(value: string) {
   return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8");
 }
 
-function factionCode(name?: string) {
-  if (!name) return null;
-  const normalized = name.toLowerCase();
-  if (normalized.includes("horde") || normalized.includes("部落")) return 1;
-  if (normalized.includes("alliance") || normalized.includes("联盟")) return 0;
+function factionCode(faction?: { id: number; name: string } | null) {
+  if (!faction) return null;
+  if (faction.id === 1) return 1;
+  if (faction.id === 2) return 0;
+  const normalized = faction.name.toLowerCase();
+  if (normalized.includes("alliance") || normalized.includes("联盟")) return 1;
+  if (normalized.includes("horde") || normalized.includes("部落")) return 0;
   return null;
 }
 
@@ -366,14 +368,13 @@ function characterProfile(character: WclCharacter) {
   const global = asRecord(raw?.global);
   const guild = asRecord(global?.guild);
   const guildRealm = asRecord(guild?.realm);
-  const faction = asRecord(global?.faction);
   const race = asRecord(global?.race);
   const gender = asRecord(global?.gender);
   const activeSpec = asRecord(global?.active_spec);
   const equippedItemLevel = numberValue(global?.equipped_item_level);
   const lastLoginTimestamp = numberValue(global?.last_login_timestamp);
   return {
-    faction: factionCode(stringValue(faction?.name) ?? character.faction?.name),
+    faction: factionCode(character.faction),
     raceName: stringValue(race?.name),
     gender: stringValue(gender?.name) ?? stringValue(gender?.type),
     guildName: stringValue(guild?.name),

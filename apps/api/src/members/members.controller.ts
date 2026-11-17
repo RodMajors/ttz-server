@@ -12,8 +12,6 @@ import {
   memberStatusSchema,
   notificationPreferenceSchema,
   pageQuerySchema,
-  type UpdateCharacterInput,
-  updateCharacterSchema,
 } from "@ttz/contracts";
 import { CurrentUser, MinPrivilege } from "../auth/auth.decorators";
 import type { AuthUser } from "../auth/auth.types";
@@ -124,13 +122,9 @@ export class MembersController {
     return serializeCharacter(await this.characters.create(user.id, body));
   }
 
-  @Patch("characters/:id")
-  async updateCharacter(
-    @CurrentUser() user: AuthUser,
-    @Param("id", new ZodValidationPipe(idSchema)) id: string,
-    @Body(new ZodValidationPipe(updateCharacterSchema)) body: UpdateCharacterInput,
-  ) {
-    return serializeCharacter(await this.characters.update(user.id, BigInt(id), body));
+  @Post("characters/:id/sync-wcl")
+  async syncCharacterFromWcl(@CurrentUser() user: AuthUser, @Param("id", new ZodValidationPipe(idSchema)) id: string) {
+    return serializeCharacter(await this.characters.syncFromWcl(user.id, BigInt(id)));
   }
 
   @Post("characters/:id/set-main")

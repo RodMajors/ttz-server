@@ -250,10 +250,6 @@ export const createCharacterSchema = z.object({
   isMain: z.boolean().default(false),
 });
 export type CreateCharacterInput = z.infer<typeof createCharacterSchema>;
-export const updateCharacterSchema = z.object({
-  itemLevel: z.number().int().min(1).max(999).nullable().optional(),
-});
-export type UpdateCharacterInput = z.infer<typeof updateCharacterSchema>;
 
 export const wclAuthorizeSchema = z.object({ authorizationUrl: z.string().url() });
 export const wclLinkStatusSchema = z.object({

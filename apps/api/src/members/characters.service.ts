@@ -1,5 +1,5 @@
 import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import type { CharacterSummary, CreateCharacterInput, UpdateCharacterInput } from "@ttz/contracts";
+import type { CharacterSummary, CreateCharacterInput } from "@ttz/contracts";
 import { PrismaService } from "../database/prisma.service";
 import { WclBindingService } from "../warcraft-logs/wcl-binding.service";
 
@@ -69,14 +69,32 @@ export class CharactersService {
     });
   }
 
-  async update(userId: bigint, characterId: bigint, input: UpdateCharacterInput) {
+  async syncFromWcl(userId: bigint, characterId: bigint) {
     const character = await this.requireOwned(userId, characterId);
+    const candidate = await this.wcl.searchCharacter(character.name, character.serverSlug, character.serverRegion);
     await this.prisma.character.update({
       where: { id: character.id },
       data: {
-        ...(input.itemLevel !== undefined
-          ? { itemLevel: input.itemLevel, itemLevelUpdatedAt: input.itemLevel === null ? null : new Date() }
-          : {}),
+        serverName: candidate.realm,
+        classId: candidate.classId,
+        faction: candidate.faction,
+        raceName: candidate.raceName,
+        gender: candidate.gender,
+        guildName: candidate.guildName,
+        guildServerName: candidate.guildServerName,
+        guildServerSlug: candidate.guildServerSlug,
+        activeSpecName: candidate.activeSpecName,
+        level: candidate.level,
+        activeTitle: candidate.activeTitle,
+        serverTypeName: candidate.serverTypeName,
+        itemLevel: candidate.itemLevel,
+        averageItemLevel: candidate.averageItemLevel,
+        itemLevelUpdatedAt: candidate.itemLevel == null ? null : new Date(),
+        lastLoginAt: candidate.lastLoginAt ? new Date(candidate.lastLoginAt) : null,
+        achievementPoints: candidate.achievementPoints,
+        gameData: candidate.gameData,
+        wclId: BigInt(candidate.wclId),
+        wclCanonicalId: BigInt(candidate.wclCanonicalId),
       },
     });
     return this.prisma.character.findUniqueOrThrow({ where: { id: characterId }, include: characterInclude });

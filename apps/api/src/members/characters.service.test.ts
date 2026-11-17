@@ -1,6 +1,52 @@
 import { characterSummarySchema } from "@ttz/contracts";
-import { describe, expect, it } from "vitest";
-import { serializeCharacter } from "./characters.service";
+import { describe, expect, it, vi } from "vitest";
+import type { PrismaService } from "../database/prisma.service";
+import type { WclBindingService } from "../warcraft-logs/wcl-binding.service";
+import { CharactersService, serializeCharacter } from "./characters.service";
+
+describe("CharactersService", () => {
+  it("refreshes the complete role profile from WCL instead of accepting a manual item level", async () => {
+    const character = { id: 1n, userId: 2n, name: "Veliotha", serverSlug: "anzu", serverRegion: "cn" };
+    const update = vi.fn().mockResolvedValue({});
+    const findUniqueOrThrow = vi.fn().mockResolvedValue({ id: 1n });
+    const prisma = {
+      character: { findUnique: vi.fn().mockResolvedValue(character), update, findUniqueOrThrow },
+    };
+    const wcl = {
+      searchCharacter: vi.fn().mockResolvedValue({
+        realm: "安苏",
+        classId: 9,
+        faction: 1,
+        raceName: "暗夜精灵",
+        gender: "女性",
+        guildName: "TheTwilightZone",
+        guildServerName: "伊森利恩",
+        guildServerSlug: "isillien",
+        activeSpecName: "痛苦",
+        level: 90,
+        activeTitle: "食蛇者",
+        serverTypeName: "至暗之夜",
+        itemLevel: 334,
+        averageItemLevel: 335,
+        lastLoginAt: "2026-11-16T00:00:00.000Z",
+        achievementPoints: 2900,
+        gameData: { global: { equipped_item_level: 334 } },
+        wclId: "112574253",
+        wclCanonicalId: "112574253",
+      }),
+    };
+    const service = new CharactersService(prisma as unknown as PrismaService, wcl as unknown as WclBindingService);
+
+    await service.syncFromWcl(2n, 1n);
+
+    expect(wcl.searchCharacter).toHaveBeenCalledWith("Veliotha", "anzu", "cn");
+    expect(update).toHaveBeenCalledWith({
+      where: { id: 1n },
+      data: expect.objectContaining({ faction: 1, itemLevel: 334, activeSpecName: "痛苦" }),
+    });
+    expect(findUniqueOrThrow).toHaveBeenCalledWith({ where: { id: 1n }, include: expect.any(Object) });
+  });
+});
 
 describe("serializeCharacter", () => {
   it("serializes the complete character summary contract", () => {
@@ -16,7 +62,7 @@ describe("serializeCharacter", () => {
       race: null,
       raceName: "暗夜精灵",
       gender: "女性",
-      faction: 0,
+      faction: 1,
       guildName: "TheTwilightZone",
       guildServerName: "伊森利恩",
       guildServerSlug: "isillien",

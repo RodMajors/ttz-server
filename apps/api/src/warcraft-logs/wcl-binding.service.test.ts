@@ -88,6 +88,7 @@ describe("WclBindingService", () => {
           serverSlug: "anzu",
           serverRegion: "cn",
           classId: 9,
+          faction: 1,
           raceName: "暗夜精灵",
           guildName: "TheTwilightZone",
           activeSpecName: "痛苦",
@@ -139,7 +140,7 @@ function claimedCharacter(input: { id: number; canonicalID: number; name: string
     name: input.name,
     classID: 10,
     claimed: input.claimed,
-    faction: { id: 1, name: "Horde" },
+    faction: { id: 1, name: "联盟" },
     server: {
       id: 569,
       slug: "anzu",
@@ -150,6 +151,7 @@ function claimedCharacter(input: { id: number; canonicalID: number; name: string
       global: {
         race: { name: "暗夜精灵" },
         gender: { name: "女性" },
+        faction: { name: "部落" },
         guild: { name: "TheTwilightZone", realm: { name: "伊森利恩", slug: "isillien" } },
         active_spec: { name: "痛苦" },
         level: 90,
