@@ -60,6 +60,32 @@ describe("CharactersService", () => {
       response: { code: "CHARACTER_ALREADY_RETIRED", message: "该角色已经退役" },
     });
   });
+
+  it("reactivates a retired role without making it the main role", async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const prisma = { character: { updateMany } };
+    const service = new CharactersService(prisma as unknown as PrismaService, {} as WclBindingService);
+
+    await expect(service.activate(2n, 1n)).resolves.toEqual({ activated: true });
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 1n, userId: 2n, isRetired: 1 },
+      data: { isRetired: 0 },
+    });
+  });
+
+  it("rejects activating a role that is already active", async () => {
+    const prisma = {
+      character: {
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        findFirst: vi.fn().mockResolvedValue({ id: 1n, userId: 2n, isRetired: 0 }),
+      },
+    };
+    const service = new CharactersService(prisma as unknown as PrismaService, {} as WclBindingService);
+
+    await expect(service.activate(2n, 1n)).rejects.toMatchObject({
+      response: { code: "CHARACTER_ALREADY_ACTIVE", message: "该角色已经处于激活状态" },
+    });
+  });
 });
 
 describe("serializeCharacter", () => {

@@ -122,6 +122,19 @@ export class CharactersService {
     return { retired: true };
   }
 
+  async activate(userId: bigint, characterId: bigint) {
+    const result = await this.prisma.character.updateMany({
+      where: { id: characterId, userId, isRetired: 1 },
+      data: { isRetired: 0 },
+    });
+    if (!result.count) {
+      const character = await this.prisma.character.findFirst({ where: { id: characterId, userId } });
+      if (!character) throw new NotFoundException({ code: "CHARACTER_NOT_FOUND", message: "角色不存在" });
+      throw new ConflictException({ code: "CHARACTER_ALREADY_ACTIVE", message: "该角色已经处于激活状态" });
+    }
+    return { activated: true };
+  }
+
   async requestVerification(userId: bigint, characterId: bigint) {
     const result = await this.prisma.character.updateMany({
       where: { id: characterId, userId, wclVerificationStatus: { in: [0, 3] } },

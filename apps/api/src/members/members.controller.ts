@@ -137,6 +137,11 @@ export class MembersController {
     return this.characters.retire(user.id, BigInt(id));
   }
 
+  @Post("characters/:id/activate")
+  activate(@CurrentUser() user: AuthUser, @Param("id", new ZodValidationPipe(idSchema)) id: string) {
+    return this.characters.activate(user.id, BigInt(id));
+  }
+
   @Post("characters/:id/request-verification")
   requestCharacterVerification(
     @CurrentUser() user: AuthUser,
