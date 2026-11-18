@@ -60,6 +60,7 @@ function toAuthUser(user: {
   name: string | null;
   guildNickname: string | null;
   wxNickname: string | null;
+  avatar: string | null;
   privilege: number;
   isApproved: number;
   rejectReason?: string | null;
@@ -70,6 +71,7 @@ function toAuthUser(user: {
     name: user.name ?? user.guildNickname ?? user.wxNickname ?? "TTZ 成员",
     wxNickname: user.wxNickname,
     guildNickname: user.guildNickname,
+    avatar: user.avatar,
     privilege: user.privilege as 0 | 1 | 2,
     isApproved: user.isApproved === 1,
     approvalStatus: (["PENDING", "APPROVED", "REJECTED"] as const)[user.isApproved] ?? "PENDING",

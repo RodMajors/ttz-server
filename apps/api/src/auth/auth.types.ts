@@ -3,6 +3,7 @@ export interface AuthUser {
   name: string;
   wxNickname: string | null;
   guildNickname: string | null;
+  avatar?: string | null;
   privilege: 0 | 1 | 2;
   isApproved: boolean;
   approvalStatus?: "PENDING" | "APPROVED" | "REJECTED";
