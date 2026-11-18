@@ -30,6 +30,7 @@ export const authUserSchema = z.object({
   name: z.string(),
   wxNickname: z.string().nullable(),
   guildNickname: z.string().nullable(),
+  avatar: z.string().nullable(),
   privilege: privilegeSchema,
   isApproved: z.boolean(),
   approvalStatus: z.enum(["PENDING", "APPROVED", "REJECTED"]),
