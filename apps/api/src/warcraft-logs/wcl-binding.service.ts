@@ -295,6 +295,7 @@ export class WclBindingService {
       classId: characterClass.id,
       className: characterClass.name ?? characterClass.en_name ?? `职业 ${character.classID}`,
       classIconUrl: assetUrl(characterClass.icon),
+      classColor: characterClass.color,
       guildNames: character.guilds?.map((guild) => guild.name) ?? [],
       wclId: String(character.id),
       wclCanonicalId: String(character.canonicalID),

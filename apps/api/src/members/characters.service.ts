@@ -228,6 +228,7 @@ export function serializeCharacter(character: {
     name: string | null;
     en_name: string | null;
     icon: string | null;
+    color: string | null;
     specs: Array<{ id: number; name: string | null; icon: string | null; role: number | null }>;
   };
 }): CharacterSummary {
@@ -241,6 +242,7 @@ export function serializeCharacter(character: {
     classId: character.classId,
     className: character.characterClass.name ?? character.characterClass.en_name ?? `职业 ${character.classId}`,
     classIconUrl: assetUrl(character.characterClass.icon),
+    classColor: character.characterClass.color,
     raceId: character.raceId,
     raceName: character.raceName ?? character.race?.name ?? null,
     gender: character.gender,

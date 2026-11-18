@@ -125,6 +125,7 @@ describe("serializeCharacter", () => {
         name: "术士",
         en_name: "Warlock",
         icon: null,
+        color: "#8788EE",
         specs: [{ id: 25, name: "痛苦", icon: null, role: 4 }],
       },
     });

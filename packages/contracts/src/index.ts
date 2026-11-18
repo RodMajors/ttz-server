@@ -122,6 +122,10 @@ export const characterSummarySchema = z.object({
   classId: z.number().int(),
   className: z.string(),
   classIconUrl: z.string().url().nullable(),
+  classColor: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .nullable(),
   raceId: z.number().int().nullable(),
   raceName: z.string().nullable(),
   gender: z.string().nullable(),
@@ -274,6 +278,10 @@ export const wclCharacterCandidateSchema = z.object({
   classId: z.number().int(),
   className: z.string(),
   classIconUrl: z.string().url().nullable(),
+  classColor: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .nullable(),
   faction: z.number().int().nullable(),
   guildNames: z.array(z.string()),
   level: z.number().int().nullable(),
