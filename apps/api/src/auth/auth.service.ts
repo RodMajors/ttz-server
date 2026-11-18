@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { ConflictException, Inject, Injectable, NotFoundException, UnauthorizedException } from "@nestjs/common";
-import type { MemberProfileInput, WechatCodeLoginInput } from "@ttz/contracts";
+import type { MemberProfileInput, WechatCodeLoginInput, WechatProfileInput } from "@ttz/contracts";
 import { PrismaService } from "../database/prisma.service";
 import type { AuthUser } from "./auth.types";
 import { LOCAL_DEV_OPENID } from "./local-dev-auth.constants";
@@ -23,7 +23,6 @@ export class AuthService {
       },
       update: {
         unionid: identity.unionid,
-        ...(input.wxNickname ? { wxNickname: input.wxNickname } : {}),
         ...(input.guildNickname ? { guildNickname: input.guildNickname } : {}),
       },
     });
@@ -107,6 +106,25 @@ export class AuthService {
           : {}),
       },
     });
+    return this.toAuthUser(updated);
+  }
+
+  async updateAvatar(userId: bigint, avatar: string) {
+    const changed = await this.prisma.user.updateMany({ where: { id: userId, avatar: null }, data: { avatar } });
+    if (changed.count !== 1) throw new ConflictException("微信头像已经授权，不能再次修改");
+    const updated = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!updated) throw new NotFoundException();
+    return this.toAuthUser(updated);
+  }
+
+  async updateWechatProfile(userId: bigint, input: WechatProfileInput) {
+    const changed = await this.prisma.user.updateMany({
+      where: { id: userId, wxNickname: null },
+      data: { wxNickname: input.wxNickname },
+    });
+    if (changed.count !== 1) throw new ConflictException("微信名称已经授权，不能再次修改");
+    const updated = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!updated) throw new NotFoundException();
     return this.toAuthUser(updated);
   }
 

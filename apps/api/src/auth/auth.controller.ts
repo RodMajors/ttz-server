@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -11,24 +12,33 @@ import {
   Put,
   Req,
   Res,
+  UploadedFile,
+  UseInterceptors,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import {
   type MemberProfileInput,
   memberProfileSchema,
   qrSessionProofSchema,
   refreshTokenSchema,
   type WechatCodeLoginInput,
+  type WechatProfileInput,
   wechatCodeLoginSchema,
+  wechatProfileSchema,
 } from "@ttz/contracts";
 import type { Request, Response } from "express";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { AllowUnapproved, CurrentUser, Public } from "./auth.decorators";
 import { AuthService } from "./auth.service";
 import type { AuthRequest, AuthUser } from "./auth.types";
+import { type AvatarFile, AvatarStorageService } from "./avatar-storage.service";
 
 @Controller("auth")
 export class AuthController {
-  constructor(@Inject(AuthService) private readonly auth: AuthService) {}
+  constructor(
+    @Inject(AuthService) private readonly auth: AuthService,
+    @Inject(AvatarStorageService) private readonly avatarStorage: AvatarStorageService,
+  ) {}
 
   @Public()
   @Post("wechat/code-login")
@@ -84,6 +94,29 @@ export class AuthController {
     @Body(new ZodValidationPipe(memberProfileSchema)) body: MemberProfileInput,
   ) {
     return this.auth.updateProfile(user, body);
+  }
+
+  @AllowUnapproved()
+  @Put("wechat-profile")
+  updateWechatProfile(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(wechatProfileSchema)) body: WechatProfileInput,
+  ) {
+    return this.auth.updateWechatProfile(user.id, body);
+  }
+
+  @AllowUnapproved()
+  @Post("avatar")
+  @UseInterceptors(FileInterceptor("avatar", { limits: { fileSize: 2 * 1024 * 1024 } }))
+  async uploadAvatar(@CurrentUser() user: AuthUser, @UploadedFile() file?: AvatarFile) {
+    if (!file) throw new BadRequestException("请选择头像图片");
+    const uploaded = await this.avatarStorage.upload(user.id, file);
+    try {
+      return await this.auth.updateAvatar(user.id, uploaded.url);
+    } catch (error) {
+      await this.avatarStorage.remove(uploaded.key).catch(() => undefined);
+      throw error;
+    }
   }
 
   @Public()

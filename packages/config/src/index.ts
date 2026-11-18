@@ -5,6 +5,11 @@ export const envSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   WEB_ORIGIN: z.string().url().default("http://localhost:3000"),
   ASSET_BASE_URL: z.string().default(""),
+  COS_SECRET_ID: z.string().default(""),
+  COS_SECRET_KEY: z.string().default(""),
+  COS_BUCKET: z.string().default(""),
+  COS_REGION: z.string().default(""),
+  COS_PUBLIC_BASE_URL: z.string().default(""),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().url(),
   REDIS_ENABLED: z

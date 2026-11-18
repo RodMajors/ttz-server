@@ -22,6 +22,8 @@ export const memberProfileSchema = z.object({
   guildNickname: z.string().trim().min(1).max(255),
 });
 export type MemberProfileInput = z.infer<typeof memberProfileSchema>;
+export const wechatProfileSchema = z.object({ wxNickname: z.string().trim().min(1).max(255) });
+export type WechatProfileInput = z.infer<typeof wechatProfileSchema>;
 
 export const refreshTokenSchema = z.object({ refreshToken: z.string().trim().min(32).max(256) });
 export const qrSessionProofSchema = z.object({ nonce: z.string().trim().min(32).max(256) });

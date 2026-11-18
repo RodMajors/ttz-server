@@ -87,6 +87,38 @@ describe("AuthService QR session state machine", () => {
     expect(result).toMatchObject({ approvalStatus: "PENDING", rejectReason: null });
   });
 
+  it("fills a missing WeChat name once", async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const findUnique = vi.fn().mockResolvedValue({
+      id: 7n,
+      name: null,
+      guildNickname: null,
+      wxNickname: "微信成员",
+      avatar: null,
+      privilege: 0,
+      isApproved: 0,
+      rejectReason: null,
+      status: 1,
+    });
+    const service = createService({ user: { updateMany, findUnique } });
+
+    const result = await service.updateWechatProfile(7n, { wxNickname: "微信成员" });
+
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 7n, wxNickname: null },
+      data: { wxNickname: "微信成员" },
+    });
+    expect(result.wxNickname).toBe("微信成员");
+  });
+
+  it("does not overwrite an authorized avatar", async () => {
+    const service = createService({ user: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) } });
+
+    await expect(service.updateAvatar(7n, "https://cdn.example.com/avatar.jpg")).rejects.toMatchObject({
+      response: { message: "微信头像已经授权，不能再次修改" },
+    });
+  });
+
   it("rejects a refresh token already rotated by another request", async () => {
     const updateMany = vi.fn().mockResolvedValue({ count: 0 });
     const service = createService({
