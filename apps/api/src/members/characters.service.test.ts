@@ -124,7 +124,8 @@ describe("serializeCharacter", () => {
       characterClass: {
         name: "术士",
         en_name: "Warlock",
-        specs: [{ id: 25, name: "痛苦", role: 4 }],
+        icon: null,
+        specs: [{ id: 25, name: "痛苦", icon: null, role: 4 }],
       },
     });
 

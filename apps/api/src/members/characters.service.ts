@@ -1,5 +1,6 @@
 import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import type { CharacterSummary, CreateCharacterInput } from "@ttz/contracts";
+import { assetUrl } from "../common/asset-url";
 import { PrismaService } from "../database/prisma.service";
 import { WclBindingService } from "../warcraft-logs/wcl-binding.service";
 
@@ -226,7 +227,8 @@ export function serializeCharacter(character: {
   characterClass: {
     name: string | null;
     en_name: string | null;
-    specs: Array<{ id: number; name: string | null; role: number | null }>;
+    icon: string | null;
+    specs: Array<{ id: number; name: string | null; icon: string | null; role: number | null }>;
   };
 }): CharacterSummary {
   return {
@@ -238,6 +240,7 @@ export function serializeCharacter(character: {
     serverRegion: character.serverRegion,
     classId: character.classId,
     className: character.characterClass.name ?? character.characterClass.en_name ?? `职业 ${character.classId}`,
+    classIconUrl: assetUrl(character.characterClass.icon),
     raceId: character.raceId,
     raceName: character.raceName ?? character.race?.name ?? null,
     gender: character.gender,
@@ -262,6 +265,7 @@ export function serializeCharacter(character: {
     availableSpecs: character.characterClass.specs.map((spec) => ({
       id: spec.id,
       name: spec.name ?? `专精 ${spec.id}`,
+      iconUrl: assetUrl(spec.icon),
       role: roleCodeToRole[spec.role ?? 0] ?? null,
     })),
   };

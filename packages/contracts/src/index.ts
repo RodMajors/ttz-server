@@ -121,6 +121,7 @@ export const characterSummarySchema = z.object({
   serverRegion: z.string(),
   classId: z.number().int(),
   className: z.string(),
+  classIconUrl: z.string().url().nullable(),
   raceId: z.number().int().nullable(),
   raceName: z.string().nullable(),
   gender: z.string().nullable(),
@@ -146,6 +147,7 @@ export const characterSummarySchema = z.object({
     z.object({
       id: z.number().int(),
       name: z.string(),
+      iconUrl: z.string().url().nullable(),
       role: roleSchema.nullable(),
     }),
   ),
@@ -271,6 +273,7 @@ export const wclCharacterCandidateSchema = z.object({
   serverRegion: z.string(),
   classId: z.number().int(),
   className: z.string(),
+  classIconUrl: z.string().url().nullable(),
   faction: z.number().int().nullable(),
   guildNames: z.array(z.string()),
   level: z.number().int().nullable(),

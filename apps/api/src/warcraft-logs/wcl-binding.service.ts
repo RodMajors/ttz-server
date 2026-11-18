@@ -2,6 +2,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 import { ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@ttz/database";
 import { WarcraftLogsClient, type WclCharacter, type WclRegion } from "@ttz/warcraft-logs";
+import { assetUrl } from "../common/asset-url";
 import { PrismaService } from "../database/prisma.service";
 
 const OAUTH_SESSION_TTL_MS = 10 * 60_000;
@@ -293,6 +294,7 @@ export class WclBindingService {
       serverRegion: character.server.region?.slug?.toLowerCase() ?? this.region(),
       classId: characterClass.id,
       className: characterClass.name ?? characterClass.en_name ?? `职业 ${character.classID}`,
+      classIconUrl: assetUrl(characterClass.icon),
       guildNames: character.guilds?.map((guild) => guild.name) ?? [],
       wclId: String(character.id),
       wclCanonicalId: String(character.canonicalID),
