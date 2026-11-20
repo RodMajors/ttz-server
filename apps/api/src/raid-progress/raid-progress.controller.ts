@@ -30,6 +30,14 @@ export class RaidProgressController {
     return this.queue.enqueue();
   }
 
+  @Get("plans/:planId/bosses/:bossId/best-attempt-metrics")
+  bestAttemptMetrics(
+    @Param("planId", new ZodValidationPipe(idSchema)) planId: string,
+    @Param("bossId", new ZodValidationPipe(idSchema)) bossId: string,
+  ) {
+    return this.service.getBestAttemptMetrics(BigInt(planId), BigInt(bossId));
+  }
+
   @Get("plans/:planId/bosses/:bossId/attempts")
   attempts(
     @Param("planId", new ZodValidationPipe(idSchema)) planId: string,

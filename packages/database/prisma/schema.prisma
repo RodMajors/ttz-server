@@ -443,6 +443,8 @@ model RaidBossAttempt {
   durationMs     Int                      @map("duration_ms") @db.UnsignedInt
   kill           Boolean
   bossPercent    Float?                   @map("boss_percent")
+  fightPercent   Float?                   @map("fight_percent")
+  phaseData      Json?                    @map("phase_data")
   players        Json?                    @map("players")
   dedupKey       String                   @unique(map: "uk_raid_boss_attempt_dedup") @map("dedup_key") @db.Char(64)
   createdAt      DateTime                 @default(now()) @map("created_at") @db.DateTime(0)

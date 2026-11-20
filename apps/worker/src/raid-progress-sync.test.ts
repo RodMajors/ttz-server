@@ -11,12 +11,17 @@ function fight(code: string, offset: number, players: string[]) {
     difficulty: 4,
     kill: false,
     bossPercent: 32,
+    fightPercent: 72,
     startTime: 0,
     endTime: 100_000,
     code,
     startedAt: start + offset,
     durationMs: 100_000,
     friendlyPlayers: players,
+    phaseData: {
+      phases: [{ id: 1, name: "Stage One", isIntermission: false }],
+      transitions: [{ phaseId: 1, offsetMs: 0 }],
+    },
   };
 }
 function attempt(offset: number, players: string[], reportCode = "report-a") {
@@ -25,6 +30,11 @@ function attempt(offset: number, players: string[], reportCode = "report-a") {
     startedAt: new Date(start + offset),
     durationMs: 100_000,
     bossPercent: 35,
+    fightPercent: 70,
+    phaseData: {
+      phases: [{ id: 1, name: "Stage One", isIntermission: false }],
+      transitions: [{ phaseId: 1, offsetMs: 0 }],
+    },
     players,
     evidence: [{ reportCode }],
   };

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { AppEnv } from "@ttz/config";
-import type { Prisma, PrismaClient } from "@ttz/database";
+import { Prisma, type PrismaClient } from "@ttz/database";
 import type { WarcraftLogsClient, WclGuildReportsPage, WclRaidZoneInfo } from "@ttz/warcraft-logs";
 
 const modes = [
@@ -19,6 +19,8 @@ type Candidate = {
   startedAt: Date;
   durationMs: number;
   bossPercent: number | null;
+  fightPercent: number | null;
+  phaseData: Prisma.JsonValue | null;
   players: Prisma.JsonValue;
   evidence: { reportCode: string }[];
 };
@@ -275,6 +277,11 @@ async function saveFight(tx: Prisma.TransactionClient, planId: bigint, progressI
     const update: Prisma.RaidBossAttemptUpdateInput = { players };
     if (percent !== null && (attempt.bossPercent === null || percent < attempt.bossPercent))
       update.bossPercent = percent;
+    const fightPercent = isPercentage(fight.fightPercent) ? fight.fightPercent : null;
+    if (fightPercent !== null && (attempt.fightPercent === null || fightPercent > attempt.fightPercent))
+      update.fightPercent = fightPercent;
+    if (fight.phaseData && shouldReplacePhaseData(attempt.phaseData, fight.phaseData))
+      update.phaseData = toInputPhaseData(fight.phaseData);
     await tx.raidBossAttempt.update({ where: { id: attempt.id }, data: update });
     if (!existing) await tx.wclReportFightEvidence.create({ data: { ...source, attemptId: attempt.id } });
     return;
@@ -289,11 +296,51 @@ async function saveFight(tx: Prisma.TransactionClient, planId: bigint, progressI
       durationMs: fight.durationMs,
       kill: fight.kill,
       bossPercent: percent,
+      fightPercent: isPercentage(fight.fightPercent) ? fight.fightPercent : null,
+      phaseData: fight.phaseData ? toInputPhaseData(fight.phaseData) : Prisma.DbNull,
       players: fight.friendlyPlayers,
       dedupKey: createHash("sha256").update([planId, source.reportCode, source.fightId].join(":")).digest("hex"),
       sources: { create: source },
     },
   });
+}
+
+function toInputPhaseData(phaseData: NonNullable<Fight["phaseData"]>): Prisma.InputJsonValue {
+  return {
+    phases: phaseData.phases.map((phase) => ({
+      id: phase.id,
+      name: phase.name,
+      isIntermission: phase.isIntermission,
+    })),
+    transitions: phaseData.transitions.map((transition) => ({
+      phaseId: transition.phaseId,
+      offsetMs: transition.offsetMs,
+    })),
+  };
+}
+
+function isPercentage(value: number | null): value is number {
+  return value !== null && Number.isFinite(value) && value >= 0 && value <= 100;
+}
+
+function shouldReplacePhaseData(current: Prisma.JsonValue | null, incoming: Fight["phaseData"]): boolean {
+  if (!incoming) return false;
+  if (!current || typeof current !== "object" || Array.isArray(current)) return true;
+  const currentTransitions = Array.isArray(current.transitions) ? current.transitions : [];
+  const currentMaxPhase = phaseScore(currentTransitions);
+  const incomingMaxPhase = phaseScore(incoming.transitions);
+  if (incomingMaxPhase !== currentMaxPhase) return incomingMaxPhase > currentMaxPhase;
+  return incoming.transitions.length > currentTransitions.length;
+}
+
+function phaseScore(transitions: unknown[]): number {
+  let max = 0;
+  for (const transition of transitions) {
+    if (!transition || typeof transition !== "object" || Array.isArray(transition)) continue;
+    const phaseId = (transition as { phaseId?: unknown }).phaseId;
+    if (typeof phaseId === "number") max = Math.max(max, phaseId);
+  }
+  return max;
 }
 
 async function updateSummary(tx: Prisma.TransactionClient, progressId: bigint) {

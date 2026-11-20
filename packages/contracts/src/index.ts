@@ -667,6 +667,36 @@ export const wclGuildProgressSettingSchema = z.object({
 });
 export type WclGuildProgressSetting = z.infer<typeof wclGuildProgressSettingSchema>;
 
+const raidBossPhaseDataSchema = z.object({
+  phases: z.array(z.object({ id: z.number().int(), name: z.string(), isIntermission: z.boolean() })),
+  transitions: z.array(z.object({ phaseId: z.number().int(), offsetMs: z.number().int().nonnegative() })),
+});
+
+export const raidBossPullPhaseSchema = z.object({
+  phaseId: z.number().int().nullable(),
+  phaseNumber: z.number().int().positive().nullable(),
+  phaseName: z.string().nullable(),
+  isIntermission: z.boolean().nullable(),
+});
+export const raidBossBestPullGraphSchema = z.object({
+  pull: z.number().int().positive(),
+  selection: z.enum(["FIRST_KILL", "LOWEST_HEALTH"]),
+  kill: z.boolean(),
+  bossPercent: z.number().min(0).max(100).nullable(),
+  fightPercent: z.number().min(0).max(100).nullable(),
+  durationMs: z.number().int().positive(),
+  reportCode: z.string(),
+  fightId: z.number().int().positive(),
+  phaseData: raidBossPhaseDataSchema.nullable(),
+  points: z.array(
+    z.object({
+      timeMs: z.number().int().nonnegative(),
+      dps: z.number().nonnegative(),
+      hps: z.number().nonnegative(),
+      dtps: z.number().nonnegative(),
+    }),
+  ),
+});
 export const raidDifficultySchema = z.enum(["HEROIC", "MYTHIC"]);
 export const raidPlanCreateSchema = z.object({
   raidId: idSchema,
@@ -681,6 +711,10 @@ export const raidBossAttemptListSchema = z.array(
     durationMs: z.number().int().nonnegative(),
     kill: z.boolean(),
     bossPercent: z.number().min(0).max(100).nullable(),
+    fightPercent: z.number().min(0).max(100).nullable(),
+    phaseData: raidBossPhaseDataSchema.nullable(),
+    reportCode: z.string().nullable(),
+    fightId: z.number().int().positive().nullable(),
   }),
 );
 export const raidEpicTimelineSchema = z
@@ -707,8 +741,11 @@ export const raidEpicTimelineSchema = z
         icon: z.string().nullable(),
         orderIndex: z.number().int(),
         attemptCount: z.number().int().nonnegative(),
+        pullPhases: z.array(raidBossPullPhaseSchema),
         status: z.enum(["NOT_STARTED", "PROGRESSING", "DEFEATED"]),
         bestPercent: z.number().nullable(),
+        bestPhaseNumber: z.number().int().positive().nullable(),
+        bestPhaseIsIntermission: z.boolean().nullable(),
         firstKillAt: isoDateTimeSchema.nullable(),
         lastKillAt: isoDateTimeSchema.nullable(),
         manuallyOverridden: z.boolean(),

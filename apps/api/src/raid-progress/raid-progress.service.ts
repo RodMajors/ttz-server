@@ -1,5 +1,6 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadGatewayException, ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import type { Prisma } from "@ttz/database";
+import { WarcraftLogsClient, type WclFightMetricGraph, type WclFightMetricPoint } from "@ttz/warcraft-logs";
 import { assetUrl } from "../common/asset-url";
 import { PrismaService } from "../database/prisma.service";
 
@@ -45,7 +46,7 @@ const raidProgressPlanInclude = {
       defaultStrategy: { select: { id: true, name: true } },
       attempts: {
         orderBy: [{ startedAt: "asc" as const }, { id: "asc" as const }],
-        select: { kill: true, bossPercent: true },
+        select: { kill: true, bossPercent: true, phaseData: true },
       },
     },
   },
@@ -59,8 +60,28 @@ const strategyVersionInclude = {
 } satisfies Prisma.BossStrategyVersionInclude;
 type StrategyVersionWithContent = Prisma.BossStrategyVersionGetPayload<{ include: typeof strategyVersionInclude }>;
 
+const metricGraphCacheTtlMs = 30 * 60_000;
+const metricGraphCacheMaxEntries = 32;
+
+type BestPullMetrics = {
+  pull: number;
+  selection: "FIRST_KILL" | "LOWEST_HEALTH";
+  kill: boolean;
+  bossPercent: number | null;
+  fightPercent: number | null;
+  durationMs: number;
+  reportCode: string;
+  fightId: number;
+  phaseData: Prisma.JsonValue | null;
+  points: WclFightMetricPoint[];
+};
+
 @Injectable()
 export class RaidProgressService {
+  private readonly wcl = new WarcraftLogsClient(process.env.WCL_CLIENT_ID ?? "", process.env.WCL_CLIENT_SECRET ?? "");
+  private readonly metricGraphCache = new Map<string, { expiresAt: number; points: WclFightMetricPoint[] }>();
+  private readonly metricGraphRequests = new Map<string, Promise<WclFightMetricGraph>>();
+
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   async getGuildSetting() {
@@ -120,7 +141,19 @@ export class RaidProgressService {
       where: { progressId: progress.id },
       orderBy: [{ startedAt: "asc" }, { id: "asc" }],
       take: 2000,
-      select: { startedAt: true, durationMs: true, kill: true, bossPercent: true },
+      select: {
+        startedAt: true,
+        durationMs: true,
+        kill: true,
+        bossPercent: true,
+        fightPercent: true,
+        phaseData: true,
+        sources: {
+          select: { reportCode: true, fightId: true },
+          orderBy: { createdAt: "asc" },
+          take: 1,
+        },
+      },
     });
     const firstKillIndex = attempts.findIndex((attempt) => attempt.kill || attempt.bossPercent === 0);
     const progressionAttempts = firstKillIndex < 0 ? attempts : attempts.slice(0, firstKillIndex + 1);
@@ -130,7 +163,110 @@ export class RaidProgressService {
       durationMs: attempt.durationMs,
       kill: attempt.kill,
       bossPercent: attempt.bossPercent,
+      fightPercent: attempt.fightPercent,
+      phaseData: attempt.phaseData,
+      reportCode: attempt.sources[0]?.reportCode ?? null,
+      fightId: attempt.sources[0] ? Number(attempt.sources[0].fightId) : null,
     }));
+  }
+
+  async getBestAttemptMetrics(planId: bigint, bossId: bigint): Promise<BestPullMetrics | null> {
+    const progress = await this.prisma.raidBossProgress.findUnique({
+      where: { progressPlanId_bossId: { progressPlanId: planId, bossId } },
+      include: { boss: { select: { excludeFromProgress: true } } },
+    });
+    if (!progress || progress.boss.excludeFromProgress)
+      throw new NotFoundException({ code: "RAID_BOSS_PROGRESS_NOT_FOUND", message: "Boss 进度不存在" });
+    const attempts = await this.prisma.raidBossAttempt.findMany({
+      where: { progressId: progress.id },
+      orderBy: [{ startedAt: "asc" }, { id: "asc" }],
+      take: 2000,
+      select: {
+        startedAt: true,
+        durationMs: true,
+        kill: true,
+        bossPercent: true,
+        fightPercent: true,
+        phaseData: true,
+        sources: {
+          select: { reportCode: true, fightId: true },
+          orderBy: { createdAt: "asc" },
+          take: 1,
+        },
+      },
+    });
+    const firstKillIndex = attempts.findIndex((attempt) => attempt.kill);
+    const selection = firstKillIndex >= 0 ? "FIRST_KILL" : "LOWEST_HEALTH";
+    let bestIndex = firstKillIndex;
+    if (bestIndex < 0) {
+      bestIndex = attempts.reduce((best, attempt, index) => {
+        if (attempt.bossPercent === null) return best;
+        if (best < 0) return index;
+        const bestPercent = attempts[best]?.bossPercent;
+        return bestPercent === null || bestPercent === undefined || attempt.bossPercent < bestPercent ? index : best;
+      }, -1);
+    }
+    if (bestIndex < 0) return null;
+    const best = attempts[bestIndex];
+    const source = best?.sources[0];
+    if (!best || !source) return null;
+    const cacheKey = `${source.reportCode}:${source.fightId}`;
+    let points = this.getCachedMetricGraph(cacheKey);
+    if (!points) {
+      const pending = this.metricGraphRequests.get(cacheKey);
+      const request =
+        pending ??
+        this.wcl.getFightMetricGraph(
+          source.reportCode,
+          Number(source.fightId),
+          process.env.WCL_REGION === "global" ? "global" : "cn",
+        );
+      if (!pending) this.metricGraphRequests.set(cacheKey, request);
+      try {
+        points = (await request).points;
+        this.cacheMetricGraph(cacheKey, points);
+      } catch {
+        throw new BadGatewayException({
+          code: "WCL_FIGHT_GRAPH_UNAVAILABLE",
+          message: "暂时无法读取这场 WCL 战斗的输出曲线，请稍后重试",
+        });
+      } finally {
+        if (!pending) this.metricGraphRequests.delete(cacheKey);
+      }
+    }
+    return {
+      pull: bestIndex + 1,
+      selection,
+      kill: best.kill,
+      bossPercent: best.bossPercent,
+      fightPercent: best.fightPercent,
+      durationMs: best.durationMs,
+      reportCode: source.reportCode,
+      fightId: Number(source.fightId),
+      phaseData: best.phaseData,
+      points,
+    };
+  }
+
+  private getCachedMetricGraph(key: string) {
+    const entry = this.metricGraphCache.get(key);
+    if (!entry) return null;
+    if (entry.expiresAt <= Date.now()) {
+      this.metricGraphCache.delete(key);
+      return null;
+    }
+    this.metricGraphCache.delete(key);
+    this.metricGraphCache.set(key, entry);
+    return entry.points;
+  }
+
+  private cacheMetricGraph(key: string, points: WclFightMetricPoint[]) {
+    this.metricGraphCache.delete(key);
+    this.metricGraphCache.set(key, { expiresAt: Date.now() + metricGraphCacheTtlMs, points });
+    if (this.metricGraphCache.size > metricGraphCacheMaxEntries) {
+      const oldestKey = this.metricGraphCache.keys().next().value;
+      if (oldestKey) this.metricGraphCache.delete(oldestKey);
+    }
   }
 
   async createPlan(
@@ -490,6 +626,98 @@ function progressionAttemptCount(attempts: Array<{ kill: boolean; bossPercent: n
   return firstKillIndex < 0 ? attempts.length : firstKillIndex + 1;
 }
 
+type PullPhase = {
+  phaseId: number | null;
+  phaseNumber: number | null;
+  phaseName: string | null;
+  isIntermission: boolean | null;
+};
+
+function phaseReachedInAttempt(phaseData: Prisma.JsonValue | null): PullPhase {
+  const data = jsonRecord(phaseData);
+  const phases = Array.isArray(data?.phases)
+    ? data.phases.map((value) => jsonRecord(value)).filter((value): value is Record<string, unknown> => value !== null)
+    : [];
+  const transitions = Array.isArray(data?.transitions)
+    ? data.transitions
+        .map((value) => jsonRecord(value))
+        .filter((value): value is Record<string, unknown> => value !== null)
+    : [];
+  const phaseId = transitions.reduce<number>((furthest, transition) => {
+    const id = transition.phaseId;
+    return typeof id === "number" ? Math.max(furthest, id) : furthest;
+  }, 0);
+  const phase = phases.find((value) => value.id === phaseId);
+  if (phaseId <= 0) return { phaseId: null, phaseNumber: null, phaseName: null, isIntermission: null };
+  const completedStages = phases.filter(
+    (value) => value.isIntermission === false && typeof value.id === "number" && value.id <= phaseId,
+  ).length;
+  return {
+    phaseId,
+    phaseNumber: completedStages || phaseId,
+    phaseName: typeof phase?.name === "string" ? phase.name : null,
+    isIntermission: typeof phase?.isIntermission === "boolean" ? phase.isIntermission : null,
+  };
+}
+
+export function progressionPullPhases(
+  attempts: Array<{ kill: boolean; bossPercent: number | null; phaseData: Prisma.JsonValue | null }>,
+) {
+  const firstKillIndex = attempts.findIndex((attempt) => attempt.kill || attempt.bossPercent === 0);
+  const progressionAttempts = firstKillIndex < 0 ? attempts : attempts.slice(0, firstKillIndex + 1);
+  let furthest: PullPhase = { phaseId: null, phaseNumber: null, phaseName: null, isIntermission: null };
+  return progressionAttempts.map((attempt) => {
+    const reached = phaseReachedInAttempt(attempt.phaseData);
+    if (reached.phaseId !== null && (furthest.phaseId === null || reached.phaseId > furthest.phaseId)) {
+      furthest = reached;
+    } else if (
+      reached.phaseId === furthest.phaseId &&
+      reached.phaseId !== null &&
+      furthest.phaseName === null &&
+      reached.phaseName !== null
+    ) {
+      furthest = reached;
+    }
+    return furthest;
+  });
+}
+
+export function bestPhaseProgress(
+  attempts: Array<{ kill: boolean; bossPercent: number | null; phaseData: Prisma.JsonValue | null }>,
+) {
+  const phases = attempts.map((attempt) => phaseReachedInAttempt(attempt.phaseData));
+  const firstKillIndex = attempts.findIndex((attempt) => attempt.kill);
+  if (firstKillIndex >= 0) {
+    return {
+      bestPercent: 0,
+      bestPhaseNumber: phases[firstKillIndex]?.phaseNumber ?? null,
+      bestPhaseIsIntermission: phases[firstKillIndex]?.isIntermission ?? null,
+    };
+  }
+  const candidates = attempts
+    .map((attempt, index) => ({ attempt, phase: phases[index] }))
+    .filter((item) => item.attempt.bossPercent !== null);
+  if (!candidates.length) return { bestPercent: null, bestPhaseNumber: null, bestPhaseIsIntermission: null };
+  const furthestPhaseNumber = Math.max(0, ...candidates.map((item) => item.phase?.phaseNumber ?? 0));
+  let phaseCandidates = candidates.filter((item) => (item.phase?.phaseNumber ?? 0) === furthestPhaseNumber);
+  if (furthestPhaseNumber > 0) {
+    const mainPhaseCandidates = phaseCandidates.filter((item) => item.phase?.isIntermission === false);
+    if (mainPhaseCandidates.length) phaseCandidates = mainPhaseCandidates;
+  }
+  const best = phaseCandidates.reduce((current, item) =>
+    current.attempt.bossPercent !== null &&
+    item.attempt.bossPercent !== null &&
+    item.attempt.bossPercent < current.attempt.bossPercent
+      ? item
+      : current,
+  );
+  return {
+    bestPercent: best.attempt.bossPercent,
+    bestPhaseNumber: best.phase?.phaseNumber ?? null,
+    bestPhaseIsIntermission: best.phase?.isIntermission ?? null,
+  };
+}
+
 function serializePlan(plan: RaidProgressPlanWithBosses) {
   return {
     id: String(plan.id),
@@ -505,23 +733,29 @@ function serializePlan(plan: RaidProgressPlanWithBosses) {
     startedAt: plan.startedAt.toISOString(),
     completedAt: plan.completedAt?.toISOString() ?? null,
     lastSyncedAt: plan.lastSyncedAt?.toISOString() ?? null,
-    bosses: plan.bosses.map((entry) => ({
-      progressId: String(entry.id),
-      id: String(entry.bossId),
-      wclId: entry.boss.wcl_id,
-      name: entry.boss.name,
-      icon: assetUrl(entry.boss.icon),
-      orderIndex: entry.boss.order_index,
-      attemptCount: progressionAttemptCount(entry.attempts),
-      status: entry.wclStatus,
-      bestPercent: entry.wclBestPercent,
-      firstKillAt: entry.wclFirstKillAt?.toISOString() ?? null,
-      lastKillAt: entry.wclLastKillAt?.toISOString() ?? null,
-      manuallyOverridden: false,
-      defaultStrategy: entry.defaultStrategy
-        ? { id: String(entry.defaultStrategy.id), name: entry.defaultStrategy.name }
-        : null,
-    })),
+    bosses: plan.bosses.map((entry) => {
+      const bestProgress = bestPhaseProgress(entry.attempts);
+      return {
+        progressId: String(entry.id),
+        id: String(entry.bossId),
+        wclId: entry.boss.wcl_id,
+        name: entry.boss.name,
+        icon: assetUrl(entry.boss.icon),
+        orderIndex: entry.boss.order_index,
+        attemptCount: progressionAttemptCount(entry.attempts),
+        pullPhases: progressionPullPhases(entry.attempts),
+        status: entry.wclStatus,
+        bestPercent: entry.wclStatus === "DEFEATED" ? 0 : bestProgress.bestPercent,
+        bestPhaseNumber: bestProgress.bestPhaseNumber,
+        bestPhaseIsIntermission: bestProgress.bestPhaseIsIntermission,
+        firstKillAt: entry.wclFirstKillAt?.toISOString() ?? null,
+        lastKillAt: entry.wclLastKillAt?.toISOString() ?? null,
+        manuallyOverridden: false,
+        defaultStrategy: entry.defaultStrategy
+          ? { id: String(entry.defaultStrategy.id), name: entry.defaultStrategy.name }
+          : null,
+      };
+    }),
   };
 }
 function serializeVersion(version: StrategyVersionWithContent) {

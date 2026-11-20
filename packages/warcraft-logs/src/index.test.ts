@@ -178,6 +178,15 @@ describe("WarcraftLogsClient", () => {
                 {
                   code: "R1",
                   startTime: 100,
+                  phases: [
+                    {
+                      encounterID: 3420,
+                      phases: [
+                        { id: 1, name: "Stage One", isIntermission: false },
+                        { id: 2, name: "Intermission", isIntermission: true },
+                      ],
+                    },
+                  ],
                   heroicFights: [
                     {
                       id: 1,
@@ -186,8 +195,10 @@ describe("WarcraftLogsClient", () => {
                       difficulty: 4,
                       kill: true,
                       bossPercentage: null,
+                      fightPercentage: 100,
                       startTime: 0,
                       endTime: 50,
+                      phaseTransitions: [{ id: 1, startTime: 100 }],
                       friendlyPlayers: [],
                     },
                   ],
@@ -199,8 +210,13 @@ describe("WarcraftLogsClient", () => {
                       difficulty: 5,
                       kill: false,
                       bossPercentage: 22.5,
+                      fightPercentage: 90.99,
                       startTime: 60,
                       endTime: 90,
+                      phaseTransitions: [
+                        { id: 1, startTime: 160 },
+                        { id: 2, startTime: 180 },
+                      ],
                       friendlyPlayers: [],
                     },
                   ],
@@ -222,6 +238,15 @@ describe("WarcraftLogsClient", () => {
         {
           code: "R1",
           startTime: 100,
+          phases: [
+            {
+              encounterId: 3420,
+              phases: [
+                { id: 1, name: "Stage One", isIntermission: false },
+                { id: 2, name: "Intermission", isIntermission: true },
+              ],
+            },
+          ],
           fights: [
             {
               id: 1,
@@ -230,9 +255,17 @@ describe("WarcraftLogsClient", () => {
               difficulty: 4,
               kill: true,
               bossPercent: null,
+              fightPercent: 100,
               startTime: 0,
               endTime: 50,
               friendlyPlayers: [],
+              phaseData: {
+                phases: [
+                  { id: 1, name: "Stage One", isIntermission: false },
+                  { id: 2, name: "Intermission", isIntermission: true },
+                ],
+                transitions: [{ phaseId: 1, offsetMs: 50 }],
+              },
             },
             {
               id: 2,
@@ -241,9 +274,20 @@ describe("WarcraftLogsClient", () => {
               difficulty: 5,
               kill: false,
               bossPercent: 22.5,
+              fightPercent: 90.99,
               startTime: 60,
               endTime: 90,
               friendlyPlayers: [],
+              phaseData: {
+                phases: [
+                  { id: 1, name: "Stage One", isIntermission: false },
+                  { id: 2, name: "Intermission", isIntermission: true },
+                ],
+                transitions: [
+                  { phaseId: 1, offsetMs: 30 },
+                  { phaseId: 2, offsetMs: 30 },
+                ],
+              },
             },
           ],
         },
@@ -252,6 +296,51 @@ describe("WarcraftLogsClient", () => {
     expect(request.mock.calls.at(-1)?.[1]).toMatchObject({
       body: expect.stringContaining("mythicFights: fights(difficulty: 5)"),
     });
+  });
+
+  it("aggregates best-fight DPS, HPS, and damage-taken time series", async () => {
+    const request = vi.fn<typeof fetch>().mockImplementation(async (url, init) => {
+      if (url === "https://www.warcraftlogs.com/oauth/token")
+        return jsonResponse({ access_token: "token", expires_in: 3600 });
+      const body = JSON.parse(String(init?.body)) as { query: string };
+      if (body.query.includes("TTZFights"))
+        return jsonResponse({
+          data: { reportData: { report: { fights: [{ id: 4, startTime: 5_000, endTime: 7_000 }] } } },
+        });
+      return jsonResponse({
+        data: {
+          reportData: {
+            report: {
+              damage: {
+                data: {
+                  series: [
+                    { pointStart: 5_000, pointInterval: 1_000, data: [10, 20] },
+                    { pointStart: 5_000, pointInterval: 1_000, data: [2, null] },
+                  ],
+                },
+              },
+              healing: { data: { series: [{ pointStart: 5_000, pointInterval: 1_000, data: [3, 4] }] } },
+              damageTaken: { data: { series: [{ pointStart: 5_000, pointInterval: 1_000, data: [5, 6] }] } },
+            },
+          },
+        },
+      });
+    });
+    const client = new WarcraftLogsClient("client-id", "client-secret", request);
+
+    await expect(client.getFightMetricGraph("R1", 4)).resolves.toEqual({
+      durationMs: 2_000,
+      points: [
+        { timeMs: 0, dps: 12, hps: 3, dtps: 5 },
+        { timeMs: 1_000, dps: 20, hps: 4, dtps: 6 },
+      ],
+    });
+    const graphQuery = JSON.parse(String(request.mock.calls.at(-1)?.[1]?.body)) as {
+      query: string;
+      variables: Record<string, unknown>;
+    };
+    expect(graphQuery.query).toContain("dataType: DamageTaken");
+    expect(graphQuery.variables).toMatchObject({ startTime: 5_000, endTime: 7_000, fightIDs: [4] });
   });
 
   it("loads raid zone metadata and paginated guild fight records", async () => {
@@ -274,6 +363,7 @@ describe("WarcraftLogsClient", () => {
                 {
                   code: "R1",
                   startTime: 100,
+                  phases: [],
                   heroicFights: [
                     {
                       id: 1,
@@ -282,8 +372,10 @@ describe("WarcraftLogsClient", () => {
                       difficulty: 4,
                       kill: true,
                       bossPercentage: null,
+                      fightPercentage: null,
                       startTime: 0,
                       endTime: 50,
+                      phaseTransitions: [],
                       friendlyPlayers: [],
                     },
                   ],
@@ -295,8 +387,10 @@ describe("WarcraftLogsClient", () => {
                       difficulty: 5,
                       kill: false,
                       bossPercentage: 22.5,
+                      fightPercentage: null,
                       startTime: 60,
                       endTime: 90,
+                      phaseTransitions: [],
                       friendlyPlayers: [],
                     },
                   ],
@@ -320,6 +414,7 @@ describe("WarcraftLogsClient", () => {
         {
           code: "R1",
           startTime: 100,
+          phases: [],
           fights: [
             {
               id: 1,
@@ -328,9 +423,11 @@ describe("WarcraftLogsClient", () => {
               difficulty: 4,
               kill: true,
               bossPercent: null,
+              fightPercent: null,
               startTime: 0,
               endTime: 50,
               friendlyPlayers: [],
+              phaseData: null,
             },
             {
               id: 2,
@@ -339,9 +436,11 @@ describe("WarcraftLogsClient", () => {
               difficulty: 5,
               kill: false,
               bossPercent: 22.5,
+              fightPercent: null,
               startTime: 60,
               endTime: 90,
               friendlyPlayers: [],
+              phaseData: null,
             },
           ],
         },

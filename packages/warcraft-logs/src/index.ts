@@ -72,13 +72,37 @@ export interface WclGuildReportFight {
   difficulty: number;
   kill: boolean;
   bossPercent: number | null;
+  fightPercent: number | null;
   startTime: number;
   endTime: number;
   friendlyPlayers: string[];
+  phaseData: WclFightPhaseData | null;
+}
+
+export interface WclFightPhaseData {
+  phases: Array<{ id: number; name: string; isIntermission: boolean }>;
+  transitions: Array<{ phaseId: number; offsetMs: number }>;
+}
+
+export interface WclFightMetricPoint {
+  timeMs: number;
+  dps: number;
+  hps: number;
+  dtps: number;
+}
+
+export interface WclFightMetricGraph {
+  durationMs: number;
+  points: WclFightMetricPoint[];
 }
 
 export interface WclGuildReportsPage {
-  reports: Array<{ code: string; startTime: number; fights: WclGuildReportFight[] }>;
+  reports: Array<{
+    code: string;
+    startTime: number;
+    phases: Array<{ encounterId: number; phases: Array<{ id: number; name: string; isIntermission: boolean }> }>;
+    fights: WclGuildReportFight[];
+  }>;
   hasMorePages: boolean;
 }
 
@@ -215,11 +239,12 @@ export class WarcraftLogsClient {
     startTime?: number;
     endTime?: number;
   }): Promise<WclGuildReportsPage> {
-    const fields = "id encounterID name difficulty kill bossPercentage startTime endTime friendlyPlayers";
+    const fields =
+      "id encounterID name difficulty kill bossPercentage fightPercentage startTime endTime friendlyPlayers phaseTransitions { id startTime }";
     const query = [
       "query TTZGuildReports($guildId: Int!, $zoneId: Int!, $page: Int!, $startTime: Float, $endTime: Float) {",
       " reportData { reports(guildID: $guildId, zoneID: $zoneId, startTime: $startTime, endTime: $endTime, limit: 10, page: $page) {",
-      ' data { code startTime masterData { actors(type: "Player") { id gameID name server } } heroicFights: fights(difficulty: 4) { ' +
+      ' data { code startTime phases { encounterID phases { id name isIntermission } } masterData { actors(type: "Player") { id gameID name server } } heroicFights: fights(difficulty: 4) { ' +
         fields +
         " } mythicFights: fights(difficulty: 5) { " +
         fields +
@@ -233,6 +258,10 @@ export class WarcraftLogsClient {
           data: Array<{
             code: string;
             startTime: number;
+            phases: Array<{
+              encounterID: number;
+              phases: Array<{ id: number; name: string; isIntermission: boolean }>;
+            }>;
             masterData?: {
               actors: Array<{ id: number; gameID: number | null; name: string; server: string | null }>;
             } | null;
@@ -240,6 +269,8 @@ export class WarcraftLogsClient {
               Omit<WclGuildReportFight, "encounterId" | "bossPercent" | "friendlyPlayers"> & {
                 encounterID: number;
                 bossPercentage: number | null;
+                fightPercentage: number | null;
+                phaseTransitions: Array<{ id: number; startTime: number }>;
                 friendlyPlayers: number[];
               }
             >;
@@ -247,6 +278,8 @@ export class WarcraftLogsClient {
               Omit<WclGuildReportFight, "encounterId" | "bossPercent"> & {
                 encounterID: number;
                 bossPercentage: number | null;
+                fightPercentage: number | null;
+                phaseTransitions: Array<{ id: number; startTime: number }>;
                 friendlyPlayers: number[];
               }
             >;
@@ -274,22 +307,107 @@ export class WarcraftLogsClient {
         return {
           code: report.code,
           startTime: report.startTime,
-          fights: [...(report.heroicFights ?? []), ...(report.mythicFights ?? [])].map((fight) => ({
-            id: fight.id,
-            encounterId: fight.encounterID,
-            name: fight.name,
-            difficulty: fight.difficulty,
-            kill: fight.kill,
-            bossPercent: fight.bossPercentage,
-            startTime: fight.startTime,
-            endTime: fight.endTime,
-            friendlyPlayers: (fight.friendlyPlayers ?? [])
-              .map((id) => players.get(id))
-              .filter((id): id is string => !!id),
+          phases: (report.phases ?? []).map((item) => ({
+            encounterId: item.encounterID,
+            phases: item.phases ?? [],
           })),
+          fights: [...(report.heroicFights ?? []), ...(report.mythicFights ?? [])].map((fight) => {
+            const phases = report.phases?.find((item) => item.encounterID === fight.encounterID)?.phases ?? [];
+            const durationMs = fight.endTime - fight.startTime;
+            const transitions = (fight.phaseTransitions ?? []).map((transition) => ({
+              phaseId: transition.id,
+              offsetMs: Math.max(0, Math.min(durationMs, transition.startTime - fight.startTime)),
+            }));
+            return {
+              id: fight.id,
+              encounterId: fight.encounterID,
+              name: fight.name,
+              difficulty: fight.difficulty,
+              kill: fight.kill,
+              bossPercent: fight.bossPercentage,
+              fightPercent: fight.fightPercentage,
+              startTime: fight.startTime,
+              endTime: fight.endTime,
+              friendlyPlayers: (fight.friendlyPlayers ?? [])
+                .map((id) => players.get(id))
+                .filter((id): id is string => !!id),
+              phaseData: phases.length || transitions.length ? { phases, transitions } : null,
+            };
+          }),
         };
       }),
     };
+  }
+
+  async getFightMetricGraph(code: string, fightId: number, region: WclRegion = "cn"): Promise<WclFightMetricGraph> {
+    const fightQuery = [
+      "query TTZFights($code: String!, $fightIDs: [Int!]) {",
+      " reportData { report(code: $code) { fights(fightIDs: $fightIDs) { id startTime endTime } } }",
+      "}",
+    ].join(" ");
+    const fightResult = await this.graphqlClient<{
+      reportData: { report: { fights: Array<{ id: number; startTime: number; endTime: number }> } | null };
+    }>(region, fightQuery, { code, fightIDs: [fightId] });
+    const fight = fightResult.reportData.report?.fights.find((item) => item.id === fightId);
+    if (!fight) throw new Error("WCL fight was not found or is not public");
+    const durationMs = Math.max(0, fight.endTime - fight.startTime);
+    if (durationMs <= 0) throw new Error("WCL fight has no duration");
+
+    const graphQuery = [
+      "query TTZFightMetricGraphs($code: String!, $fightIDs: [Int!], $startTime: Float!, $endTime: Float!) {",
+      " reportData { report(code: $code) {",
+      " damage: graph(dataType: DamageDone, fightIDs: $fightIDs, startTime: $startTime, endTime: $endTime)",
+      " healing: graph(dataType: Healing, fightIDs: $fightIDs, startTime: $startTime, endTime: $endTime)",
+      " damageTaken: graph(dataType: DamageTaken, fightIDs: $fightIDs, startTime: $startTime, endTime: $endTime)",
+      " } }",
+      "}",
+    ].join(" ");
+    type RawGraph = {
+      data?: {
+        series?: Array<{
+          pointStart?: number | null;
+          pointInterval?: number | null;
+          data?: Array<number | null> | null;
+        }> | null;
+      } | null;
+    } | null;
+    const graphResult = await this.graphqlClient<{
+      reportData: {
+        report: { damage: RawGraph; healing: RawGraph; damageTaken: RawGraph } | null;
+      };
+    }>(region, graphQuery, {
+      code,
+      fightIDs: [fightId],
+      startTime: fight.startTime,
+      endTime: fight.endTime,
+    });
+    const report = graphResult.reportData.report;
+    if (!report) throw new Error("WCL report was not found or is not public");
+
+    const points = new Map<number, WclFightMetricPoint>();
+    const append = (graph: RawGraph, metric: "dps" | "hps" | "dtps") => {
+      for (const series of graph?.data?.series ?? []) {
+        const pointStart = Number.isFinite(series.pointStart) ? (series.pointStart as number) : fight.startTime;
+        const pointInterval =
+          Number.isFinite(series.pointInterval) && (series.pointInterval as number) > 0
+            ? (series.pointInterval as number)
+            : 1000;
+        for (const [index, value] of (series.data ?? []).entries()) {
+          if (typeof value !== "number" || !Number.isFinite(value)) continue;
+          const timeMs = Math.max(
+            0,
+            Math.min(durationMs, Math.round(pointStart + index * pointInterval - fight.startTime)),
+          );
+          const point = points.get(timeMs) ?? { timeMs, dps: 0, hps: 0, dtps: 0 };
+          point[metric] += value;
+          points.set(timeMs, point);
+        }
+      }
+    };
+    append(report.damage, "dps");
+    append(report.healing, "hps");
+    append(report.damageTaken, "dtps");
+    return { durationMs, points: [...points.values()].sort((a, b) => a.timeMs - b.timeMs) };
   }
 
   async getReport(code: string): Promise<WclReportData> {
