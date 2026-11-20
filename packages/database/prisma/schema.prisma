@@ -350,12 +350,13 @@ model RaidProgressPlan {
   completedAt    DateTime?             @map("completed_at") @db.DateTime(0)
   lastSyncedAt   DateTime?             @map("last_synced_at") @db.DateTime(0)
   syncCursorAt   DateTime?             @map("sync_cursor_at") @db.DateTime(0)
+  syncCursorEndAt DateTime?            @map("sync_cursor_end_at") @db.DateTime(0)
   syncCursorPage Int                   @default(1) @map("sync_cursor_page") @db.UnsignedInt
-  createdBy      BigInt                @map("created_by") @db.UnsignedBigInt
+  createdBy      BigInt?               @map("created_by") @db.UnsignedBigInt
   createdAt      DateTime              @default(now()) @map("created_at") @db.DateTime(0)
   updatedAt      DateTime              @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
   raid           raids                 @relation(fields: [raidId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_raid_progress_plan_raid")
-  creator        User                  @relation(fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_raid_progress_plan_creator")
+  creator        User?                 @relation(fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_raid_progress_plan_creator")
   bosses         RaidBossProgress[]
   strategies     BossStrategy[]
   raidActivities activity_raid_ext[]
@@ -364,7 +365,7 @@ model RaidProgressPlan {
 
   @@index([status, difficulty], map: "idx_raid_progress_plan_status")
   @@index([raidId, season], map: "idx_raid_progress_plan_raid_season")
-    @@unique([raidId, difficulty, season], map: "uk_raid_progress_plan_season")
+  @@unique([raidId, difficulty], map: "uk_raid_progress_plan_raid_difficulty")
   @@map("raid_progress_plans")
 }
 
@@ -438,10 +439,11 @@ model RaidBossAttempt {
   progressId     BigInt                   @map("progress_id") @db.UnsignedBigInt
   encounterId    Int                      @map("encounter_id")
   difficulty     Int                      @db.TinyInt
-  startedAt      DateTime                 @map("started_at") @db.DateTime(0)
+  startedAt      DateTime                 @map("started_at") @db.DateTime(3)
   durationMs     Int                      @map("duration_ms") @db.UnsignedInt
   kill           Boolean
   bossPercent    Float?                   @map("boss_percent")
+  players        Json?                    @map("players")
   dedupKey       String                   @unique(map: "uk_raid_boss_attempt_dedup") @map("dedup_key") @db.Char(64)
   createdAt      DateTime                 @default(now()) @map("created_at") @db.DateTime(0)
   updatedAt      DateTime                 @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
@@ -462,7 +464,8 @@ model WclReportFightEvidence {
   createdAt  DateTime        @default(now()) @map("created_at") @db.DateTime(0)
   attempt    RaidBossAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_wcl_fight_evidence_attempt")
 
-  @@unique([reportCode, fightId], map: "uk_wcl_report_fight")
+  @@unique([attemptId, reportCode, fightId], map: "uk_wcl_attempt_report_fight")
+  @@index([reportCode, fightId], map: "idx_wcl_report_fight")
   @@index([attemptId], map: "idx_wcl_fight_evidence_attempt")
   @@map("wcl_report_fight_evidence")
 }
@@ -885,6 +888,7 @@ model bosses {
   short_name        String?              @db.VarChar(32)
   order_index       Int                  @default(1) @db.TinyInt
   icon              String?              @db.VarChar(255)
+  excludeFromProgress Boolean             @default(false) @map("exclude_from_progress")
   is_final          Int                  @default(0) @db.TinyInt
   progress          Int                  @default(0) @db.SmallInt
   created_at        DateTime             @default(now()) @db.DateTime(0)

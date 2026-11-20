@@ -74,6 +74,7 @@ export interface WclGuildReportFight {
   bossPercent: number | null;
   startTime: number;
   endTime: number;
+  friendlyPlayers: string[];
 }
 
 export interface WclGuildReportsPage {
@@ -212,12 +213,13 @@ export class WarcraftLogsClient {
     page: number;
     region?: WclRegion;
     startTime?: number;
+    endTime?: number;
   }): Promise<WclGuildReportsPage> {
-    const fields = "id encounterID name difficulty kill bossPercentage startTime endTime";
+    const fields = "id encounterID name difficulty kill bossPercentage startTime endTime friendlyPlayers";
     const query = [
-      "query TTZGuildReports($guildId: Int!, $zoneId: Int!, $page: Int!, $startTime: Float) {",
-      " reportData { reports(guildID: $guildId, zoneID: $zoneId, startTime: $startTime, limit: 10, page: $page) {",
-      " data { code startTime heroicFights: fights(difficulty: 4) { " +
+      "query TTZGuildReports($guildId: Int!, $zoneId: Int!, $page: Int!, $startTime: Float, $endTime: Float) {",
+      " reportData { reports(guildID: $guildId, zoneID: $zoneId, startTime: $startTime, endTime: $endTime, limit: 10, page: $page) {",
+      ' data { code startTime masterData { actors(type: "Player") { id gameID name server } } heroicFights: fights(difficulty: 4) { ' +
         fields +
         " } mythicFights: fights(difficulty: 5) { " +
         fields +
@@ -231,16 +233,21 @@ export class WarcraftLogsClient {
           data: Array<{
             code: string;
             startTime: number;
+            masterData?: {
+              actors: Array<{ id: number; gameID: number | null; name: string; server: string | null }>;
+            } | null;
             heroicFights: Array<
-              Omit<WclGuildReportFight, "encounterId" | "bossPercent"> & {
+              Omit<WclGuildReportFight, "encounterId" | "bossPercent" | "friendlyPlayers"> & {
                 encounterID: number;
                 bossPercentage: number | null;
+                friendlyPlayers: number[];
               }
             >;
             mythicFights: Array<
               Omit<WclGuildReportFight, "encounterId" | "bossPercent"> & {
                 encounterID: number;
                 bossPercentage: number | null;
+                friendlyPlayers: number[];
               }
             >;
           }>;
@@ -252,24 +259,36 @@ export class WarcraftLogsClient {
       zoneId: input.zoneId,
       page: input.page,
       ...(input.startTime !== undefined ? { startTime: input.startTime } : {}),
+      ...(input.endTime !== undefined ? { endTime: input.endTime } : {}),
     });
     const result = data.reportData.reports;
     return {
       hasMorePages: result.has_more_pages ?? false,
-      reports: (result.data ?? []).map((report) => ({
-        code: report.code,
-        startTime: report.startTime,
-        fights: [...(report.heroicFights ?? []), ...(report.mythicFights ?? [])].map((fight) => ({
-          id: fight.id,
-          encounterId: fight.encounterID,
-          name: fight.name,
-          difficulty: fight.difficulty,
-          kill: fight.kill,
-          bossPercent: fight.bossPercentage,
-          startTime: fight.startTime,
-          endTime: fight.endTime,
-        })),
-      })),
+      reports: (result.data ?? []).map((report) => {
+        const players = new Map(
+          (report.masterData?.actors ?? []).map((actor) => [
+            actor.id,
+            String(actor.gameID ?? actor.name.toLocaleLowerCase() + "-" + (actor.server ?? "")),
+          ]),
+        );
+        return {
+          code: report.code,
+          startTime: report.startTime,
+          fights: [...(report.heroicFights ?? []), ...(report.mythicFights ?? [])].map((fight) => ({
+            id: fight.id,
+            encounterId: fight.encounterID,
+            name: fight.name,
+            difficulty: fight.difficulty,
+            kill: fight.kill,
+            bossPercent: fight.bossPercentage,
+            startTime: fight.startTime,
+            endTime: fight.endTime,
+            friendlyPlayers: (fight.friendlyPlayers ?? [])
+              .map((id) => players.get(id))
+              .filter((id): id is string => !!id),
+          })),
+        };
+      }),
     };
   }
 

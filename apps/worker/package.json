@@ -6,6 +6,7 @@
     "build": "node scripts/bundle.mjs",
     "dev": "tsx watch --env-file=../../.env src/main.ts",
     "start": "node --env-file=../../.env dist/worker.cjs",
+    "test": "tsx --test src/raid-progress-sync.test.ts",
     "check": "tsc --noEmit",
     "typecheck": "tsc --noEmit"
   },

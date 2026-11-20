@@ -188,6 +188,7 @@ describe("WarcraftLogsClient", () => {
                       bossPercentage: null,
                       startTime: 0,
                       endTime: 50,
+                      friendlyPlayers: [],
                     },
                   ],
                   mythicFights: [
@@ -200,6 +201,7 @@ describe("WarcraftLogsClient", () => {
                       bossPercentage: 22.5,
                       startTime: 60,
                       endTime: 90,
+                      friendlyPlayers: [],
                     },
                   ],
                 },
@@ -230,6 +232,7 @@ describe("WarcraftLogsClient", () => {
               bossPercent: null,
               startTime: 0,
               endTime: 50,
+              friendlyPlayers: [],
             },
             {
               id: 2,
@@ -240,6 +243,7 @@ describe("WarcraftLogsClient", () => {
               bossPercent: 22.5,
               startTime: 60,
               endTime: 90,
+              friendlyPlayers: [],
             },
           ],
         },
@@ -280,6 +284,7 @@ describe("WarcraftLogsClient", () => {
                       bossPercentage: null,
                       startTime: 0,
                       endTime: 50,
+                      friendlyPlayers: [],
                     },
                   ],
                   mythicFights: [
@@ -292,6 +297,7 @@ describe("WarcraftLogsClient", () => {
                       bossPercentage: 22.5,
                       startTime: 60,
                       endTime: 90,
+                      friendlyPlayers: [],
                     },
                   ],
                 },
@@ -324,6 +330,7 @@ describe("WarcraftLogsClient", () => {
               bossPercent: null,
               startTime: 0,
               endTime: 50,
+              friendlyPlayers: [],
             },
             {
               id: 2,
@@ -334,6 +341,7 @@ describe("WarcraftLogsClient", () => {
               bossPercent: 22.5,
               startTime: 60,
               endTime: 90,
+              friendlyPlayers: [],
             },
           ],
         },

@@ -1,5 +1,6 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import type { Prisma } from "@ttz/database";
+import { assetUrl } from "../common/asset-url";
 import { PrismaService } from "../database/prisma.service";
 
 type GuildSettingInput = {
@@ -35,10 +36,18 @@ type StrategySlotInput = {
 };
 
 const raidProgressPlanInclude = {
-  raid: { select: { name: true, wclZoneId: true } },
+  raid: { select: { name: true, wclZoneId: true, icon: true, background: true } },
   bosses: {
+    where: { boss: { excludeFromProgress: false } },
     orderBy: { boss: { order_index: "asc" as const } },
-    include: { boss: true, defaultStrategy: { select: { id: true, name: true } } },
+    include: {
+      boss: true,
+      defaultStrategy: { select: { id: true, name: true } },
+      attempts: {
+        orderBy: [{ startedAt: "asc" as const }, { id: "asc" as const }],
+        select: { kill: true, bossPercent: true },
+      },
+    },
   },
 } satisfies Prisma.RaidProgressPlanInclude;
 type RaidProgressPlanWithBosses = Prisma.RaidProgressPlanGetPayload<{ include: typeof raidProgressPlanInclude }>;
@@ -85,10 +94,43 @@ export class RaidProgressService {
   async listPlans() {
     const plans = await this.prisma.raidProgressPlan.findMany({
       where: { status: { in: ["ACTIVE", "COMPLETED"] } },
-      orderBy: [{ status: "asc" }, { startedAt: "desc" }],
+      orderBy: { id: "desc" },
       include: raidProgressPlanInclude,
     });
     return plans.map(serializePlan);
+  }
+
+  async getEpicTimeline() {
+    const plan = await this.prisma.raidProgressPlan.findFirst({
+      where: { status: "ACTIVE", difficulty: 3 },
+      orderBy: { id: "desc" },
+      include: raidProgressPlanInclude,
+    });
+    return plan ? serializePlan(plan) : null;
+  }
+
+  async getBossAttempts(planId: bigint, bossId: bigint) {
+    const progress = await this.prisma.raidBossProgress.findUnique({
+      where: { progressPlanId_bossId: { progressPlanId: planId, bossId } },
+      include: { boss: { select: { excludeFromProgress: true } } },
+    });
+    if (!progress || progress.boss.excludeFromProgress)
+      throw new NotFoundException({ code: "RAID_BOSS_PROGRESS_NOT_FOUND", message: "Boss 进度不存在" });
+    const attempts = await this.prisma.raidBossAttempt.findMany({
+      where: { progressId: progress.id },
+      orderBy: [{ startedAt: "asc" }, { id: "asc" }],
+      take: 2000,
+      select: { startedAt: true, durationMs: true, kill: true, bossPercent: true },
+    });
+    const firstKillIndex = attempts.findIndex((attempt) => attempt.kill || attempt.bossPercent === 0);
+    const progressionAttempts = firstKillIndex < 0 ? attempts : attempts.slice(0, firstKillIndex + 1);
+    return progressionAttempts.map((attempt, index) => ({
+      pull: index + 1,
+      startedAt: attempt.startedAt.toISOString(),
+      durationMs: attempt.durationMs,
+      kill: attempt.kill,
+      bossPercent: attempt.bossPercent,
+    }));
   }
 
   async createPlan(
@@ -443,11 +485,18 @@ function jsonRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
 }
 
+function progressionAttemptCount(attempts: Array<{ kill: boolean; bossPercent: number | null }>) {
+  const firstKillIndex = attempts.findIndex((attempt) => attempt.kill || attempt.bossPercent === 0);
+  return firstKillIndex < 0 ? attempts.length : firstKillIndex + 1;
+}
+
 function serializePlan(plan: RaidProgressPlanWithBosses) {
   return {
     id: String(plan.id),
     raidId: String(plan.raidId),
     raidName: plan.raid.name,
+    raidIcon: assetUrl(plan.raid.icon),
+    raidBackground: assetUrl(plan.raid.background),
     zoneId: plan.raid.wclZoneId,
     difficulty: plan.difficulty === 3 ? "MYTHIC" : "HEROIC",
     season: plan.season,
@@ -461,12 +510,14 @@ function serializePlan(plan: RaidProgressPlanWithBosses) {
       id: String(entry.bossId),
       wclId: entry.boss.wcl_id,
       name: entry.boss.name,
+      icon: assetUrl(entry.boss.icon),
       orderIndex: entry.boss.order_index,
-      status: entry.manualStatus ?? entry.wclStatus,
-      bestPercent: entry.manualStatus ? entry.manualBestPercent : entry.wclBestPercent,
-      firstKillAt: (entry.manualStatus ? entry.manualFirstKillAt : entry.wclFirstKillAt)?.toISOString() ?? null,
-      lastKillAt: (entry.manualStatus ? entry.manualLastKillAt : entry.wclLastKillAt)?.toISOString() ?? null,
-      manuallyOverridden: entry.manualStatus !== null,
+      attemptCount: progressionAttemptCount(entry.attempts),
+      status: entry.wclStatus,
+      bestPercent: entry.wclBestPercent,
+      firstKillAt: entry.wclFirstKillAt?.toISOString() ?? null,
+      lastKillAt: entry.wclLastKillAt?.toISOString() ?? null,
+      manuallyOverridden: false,
       defaultStrategy: entry.defaultStrategy
         ? { id: String(entry.defaultStrategy.id), name: entry.defaultStrategy.name }
         : null,

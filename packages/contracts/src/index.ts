@@ -674,6 +674,49 @@ export const raidPlanCreateSchema = z.object({
   season: z.string().trim().min(1).max(32),
   name: z.string().trim().min(2).max(128),
 });
+export const raidBossAttemptListSchema = z.array(
+  z.object({
+    pull: z.number().int().positive(),
+    startedAt: isoDateTimeSchema,
+    durationMs: z.number().int().nonnegative(),
+    kill: z.boolean(),
+    bossPercent: z.number().min(0).max(100).nullable(),
+  }),
+);
+export const raidEpicTimelineSchema = z
+  .object({
+    id: idSchema,
+    raidId: idSchema,
+    raidName: z.string(),
+    raidIcon: z.string().nullable(),
+    raidBackground: z.string().nullable(),
+    zoneId: z.number().int().nullable(),
+    difficulty: raidDifficultySchema,
+    season: z.string(),
+    name: z.string(),
+    status: z.string(),
+    startedAt: isoDateTimeSchema,
+    completedAt: isoDateTimeSchema.nullable(),
+    lastSyncedAt: isoDateTimeSchema.nullable(),
+    bosses: z.array(
+      z.object({
+        progressId: idSchema,
+        id: idSchema,
+        wclId: z.number().int(),
+        name: z.string(),
+        icon: z.string().nullable(),
+        orderIndex: z.number().int(),
+        attemptCount: z.number().int().nonnegative(),
+        status: z.enum(["NOT_STARTED", "PROGRESSING", "DEFEATED"]),
+        bestPercent: z.number().nullable(),
+        firstKillAt: isoDateTimeSchema.nullable(),
+        lastKillAt: isoDateTimeSchema.nullable(),
+        manuallyOverridden: z.boolean(),
+        defaultStrategy: z.object({ id: idSchema, name: z.string() }).nullable(),
+      }),
+    ),
+  })
+  .nullable();
 export const raidBossManualOverrideSchema = z.object({
   status: z.enum(["NOT_STARTED", "PROGRESSING", "DEFEATED"]).nullable(),
   bestPercent: z.number().min(0).max(100).nullable(),

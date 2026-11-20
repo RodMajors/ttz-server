@@ -26,7 +26,13 @@ export const envSchema = z.object({
   WCL_GUILD_SERVER_SLUG: z.string().trim().min(1).default("isillien"),
   WCL_GUILD_SERVER_REGION: z.string().trim().min(1).default("cn"),
   WCL_RAID_ZONE_ID: z.coerce.number().int().positive().default(53),
-  WCL_SEASON: z.string().trim().min(1).default("current"),
+  WCL_RAID_ZONE_IDS: z
+    .string()
+    .transform((value) => [...new Set(value.split(",").map((id) => Number(id.trim())))])
+    .pipe(z.array(z.number().int().positive()).min(1))
+    .optional(),
+  WCL_SEASON: z.string().trim().min(1).max(32).default("current"),
+  WCL_SEASON_START_AT: z.iso.datetime({ offset: true }).optional(),
   WCL_REDIRECT_URI: z.string().url().default("http://127.0.0.1:3001/api/auth/wcl/callback"),
   SESSION_COOKIE_NAME: z.string().trim().min(1).default("ttz_session"),
   SESSION_TTL_SECONDS: z.coerce.number().int().min(300).max(2_592_000).default(604_800),
