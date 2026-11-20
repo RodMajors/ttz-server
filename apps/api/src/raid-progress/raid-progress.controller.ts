@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Inject, Param, Post, Put } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Patch, Post, Put } from "@nestjs/common";
 import {
   activityStrategyAssignmentsSchema,
   bossStrategyCreateSchema,
+  bossStrategyUpdateSchema,
   bossStrategyVersionSaveSchema,
   idSchema,
 } from "@ttz/contracts";
@@ -51,6 +52,12 @@ export class RaidProgressController {
     return this.service.getBossAttempts(BigInt(planId), BigInt(bossId));
   }
 
+  @Get("strategies/manage")
+  @MinPrivilege(1)
+  manageStrategies() {
+    return this.service.listStrategiesForManagement();
+  }
+
   @Get("plans/:id/strategies")
   strategies(@Param("id", new ZodValidationPipe(idSchema)) id: string) {
     return this.service.getPublishedStrategies(BigInt(id));
@@ -85,6 +92,33 @@ export class RaidProgressController {
     @Body(new ZodValidationPipe(bossStrategyCreateSchema)) body: Parameters<RaidProgressService["createStrategy"]>[0],
   ) {
     return this.service.createStrategy(body, user.id);
+  }
+
+  @Patch("strategies/:id")
+  @MinPrivilege(1)
+  updateStrategy(
+    @Param("id", new ZodValidationPipe(idSchema)) id: string,
+    @Body(new ZodValidationPipe(bossStrategyUpdateSchema)) body: Parameters<RaidProgressService["updateStrategy"]>[1],
+  ) {
+    return this.service.updateStrategy(BigInt(id), body);
+  }
+
+  @Post("strategies/:id/default")
+  @MinPrivilege(1)
+  setDefaultStrategy(@Param("id", new ZodValidationPipe(idSchema)) id: string) {
+    return this.service.setDefaultStrategy(BigInt(id));
+  }
+
+  @Post("strategies/:id/archive")
+  @MinPrivilege(1)
+  archiveStrategy(@Param("id", new ZodValidationPipe(idSchema)) id: string) {
+    return this.service.setStrategyArchived(BigInt(id), true);
+  }
+
+  @Post("strategies/:id/restore")
+  @MinPrivilege(1)
+  restoreStrategy(@Param("id", new ZodValidationPipe(idSchema)) id: string) {
+    return this.service.setStrategyArchived(BigInt(id), false);
   }
 
   @Post("strategies/:id/versions")

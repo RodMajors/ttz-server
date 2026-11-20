@@ -328,4 +328,76 @@ describe("RaidProgressService", () => {
 
     expect(result).toMatchObject({ id: "12", status: "DRAFT" });
   });
+  it("keeps draft, published, and archived strategy versions discoverable for administrators", async () => {
+    const prisma = {
+      bossStrategy: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: 9n,
+            progressPlanId: 2n,
+            bossId: 3n,
+            name: "稳健方案",
+            description: null,
+            status: "ACTIVE",
+            plan: { name: "当前史诗计划", difficulty: 3, status: "ACTIVE" },
+            boss: { name: "盘卷祭坛" },
+            versions: [
+              {
+                id: 91n,
+                versionNo: 2,
+                status: "DRAFT",
+                changeSummary: "调整分组",
+                createdAt: new Date("2026-11-21T00:00:00Z"),
+                publishedAt: null,
+                creator: { name: "作者", guildNickname: null },
+                publisher: null,
+              },
+              {
+                id: 90n,
+                versionNo: 1,
+                status: "PUBLISHED",
+                changeSummary: null,
+                createdAt: new Date("2026-11-20T00:00:00Z"),
+                publishedAt: new Date("2026-11-20T01:00:00Z"),
+                creator: { name: "作者", guildNickname: null },
+                publisher: { name: "审核人", guildNickname: null },
+              },
+            ],
+          },
+        ]),
+      },
+      raidBossProgress: {
+        findMany: vi.fn().mockResolvedValue([{ progressPlanId: 2n, bossId: 3n, defaultStrategyId: 9n }]),
+      },
+    } as unknown as PrismaService;
+    const rows = await new RaidProgressService(prisma).listStrategiesForManagement();
+    expect(rows[0]).toMatchObject({ id: "9", bossName: "盘卷祭坛", status: "ACTIVE", isDefault: true });
+    expect(rows[0]?.versions).toMatchObject([
+      { id: "91", status: "DRAFT", createdByName: "作者", publishedByName: null },
+      { id: "90", status: "PUBLISHED", publishedByName: "审核人" },
+    ]);
+  });
+
+  it("clears the default pointer before archiving and supports restoration", async () => {
+    const clearDefault = vi.fn().mockResolvedValue({ count: 1 });
+    const updateStrategy = vi.fn().mockResolvedValue({ id: 9n, status: "ARCHIVED" });
+    const transaction = vi.fn(async (callback: (tx: unknown) => unknown) =>
+      callback({
+        raidBossProgress: { updateMany: clearDefault },
+        bossStrategy: { update: updateStrategy },
+      }),
+    );
+    const prisma = {
+      bossStrategy: { findUnique: vi.fn().mockResolvedValue({ id: 9n, progressPlanId: 2n, bossId: 3n }) },
+      $transaction: transaction,
+    } as unknown as PrismaService;
+    await expect(new RaidProgressService(prisma).setStrategyArchived(9n, true)).resolves.toEqual({
+      id: "9",
+      status: "ARCHIVED",
+    });
+    expect(clearDefault).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { progressPlanId: 2n, bossId: 3n, defaultStrategyId: 9n } }),
+    );
+    expect(updateStrategy).toHaveBeenCalledWith({ where: { id: 9n }, data: { status: "ARCHIVED" } });
+  });
 });

@@ -357,6 +357,112 @@ export class RaidProgressService {
     return { id: row.id.toString(), manuallyOverridden: row.manualStatus !== null };
   }
 
+  async listStrategiesForManagement() {
+    const strategies = await this.prisma.bossStrategy.findMany({
+      include: {
+        plan: { select: { id: true, name: true, difficulty: true, status: true } },
+        boss: { select: { name: true } },
+        versions: {
+          orderBy: { versionNo: "desc" },
+          include: {
+            creator: { select: { name: true, guildNickname: true } },
+            publisher: { select: { name: true, guildNickname: true } },
+          },
+        },
+      },
+      orderBy: [{ progressPlanId: "desc" }, { bossId: "asc" }, { name: "asc" }],
+    });
+    const progress = strategies.length
+      ? await this.prisma.raidBossProgress.findMany({
+          where: { progressPlanId: { in: [...new Set(strategies.map((strategy) => strategy.progressPlanId))] } },
+          select: { progressPlanId: true, bossId: true, defaultStrategyId: true },
+        })
+      : [];
+    const defaults = new Set(
+      progress.flatMap((row) => (row.defaultStrategyId ? [row.defaultStrategyId.toString()] : [])),
+    );
+    return strategies.map((strategy) => ({
+      id: strategy.id.toString(),
+      progressPlanId: strategy.progressPlanId.toString(),
+      planName: strategy.plan.name,
+      difficulty: strategy.plan.difficulty === 3 ? ("MYTHIC" as const) : ("HEROIC" as const),
+      planStatus: strategy.plan.status,
+      bossId: strategy.bossId.toString(),
+      bossName: strategy.boss.name,
+      name: strategy.name,
+      description: strategy.description,
+      status: strategy.status === "ARCHIVED" ? ("ARCHIVED" as const) : ("ACTIVE" as const),
+      isDefault: defaults.has(strategy.id.toString()),
+      versions: strategy.versions.map((version) => ({
+        id: version.id.toString(),
+        versionNo: version.versionNo,
+        status:
+          version.status === "PUBLISHED"
+            ? ("PUBLISHED" as const)
+            : version.status === "ARCHIVED"
+              ? ("ARCHIVED" as const)
+              : ("DRAFT" as const),
+        changeSummary: version.changeSummary,
+        createdAt: version.createdAt.toISOString(),
+        publishedAt: version.publishedAt?.toISOString() ?? null,
+        createdByName: version.creator.guildNickname ?? version.creator.name ?? "管理员",
+        publishedByName: version.publisher?.guildNickname ?? version.publisher?.name ?? null,
+      })),
+    }));
+  }
+
+  async setDefaultStrategy(strategyId: bigint) {
+    const strategy = await this.prisma.bossStrategy.findFirst({
+      where: { id: strategyId, status: "ACTIVE", versions: { some: { status: "PUBLISHED" } } },
+      select: { id: true, progressPlanId: true, bossId: true },
+    });
+    if (!strategy)
+      throw new ConflictException({
+        code: "STRATEGY_NOT_PUBLISHABLE",
+        message: "只有包含已发布版本的启用方案可以设为默认",
+      });
+    const progress = await this.prisma.raidBossProgress.update({
+      where: { progressPlanId_bossId: { progressPlanId: strategy.progressPlanId, bossId: strategy.bossId } },
+      data: { defaultStrategyId: strategy.id },
+    });
+    return {
+      strategyId: strategy.id.toString(),
+      bossId: strategy.bossId.toString(),
+      defaultStrategyId: progress.defaultStrategyId?.toString() ?? null,
+    };
+  }
+
+  async updateStrategy(strategyId: bigint, input: { name: string; description: string | null }) {
+    const strategy = await this.prisma.bossStrategy.findUnique({ where: { id: strategyId } });
+    if (!strategy) throw new NotFoundException({ code: "STRATEGY_NOT_FOUND", message: "战术方案不存在" });
+    const row = await this.prisma.bossStrategy.update({
+      where: { id: strategyId },
+      data: { name: input.name, description: input.description },
+    });
+    return { id: row.id.toString(), name: row.name, description: row.description };
+  }
+
+  async setStrategyArchived(strategyId: bigint, archived: boolean) {
+    const strategy = await this.prisma.bossStrategy.findUnique({
+      where: { id: strategyId },
+      select: { id: true, progressPlanId: true, bossId: true },
+    });
+    if (!strategy) throw new NotFoundException({ code: "STRATEGY_NOT_FOUND", message: "战术方案不存在" });
+    return this.prisma.$transaction(async (tx) => {
+      if (archived) {
+        await tx.raidBossProgress.updateMany({
+          where: { progressPlanId: strategy.progressPlanId, bossId: strategy.bossId, defaultStrategyId: strategyId },
+          data: { defaultStrategyId: null },
+        });
+      }
+      const row = await tx.bossStrategy.update({
+        where: { id: strategyId },
+        data: { status: archived ? "ARCHIVED" : "ACTIVE" },
+      });
+      return { id: row.id.toString(), status: row.status };
+    });
+  }
+
   async createStrategy(
     input: { progressPlanId: string; bossId: string; name: string; description?: string | null },
     userId: bigint,
