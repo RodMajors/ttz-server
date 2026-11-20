@@ -508,6 +508,7 @@ model BossStrategyVersion {
   publisher       User?                      @relation("BossStrategyVersionPublisher", fields: [publishedBy], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_boss_strategy_version_publisher")
   blocks          BossStrategyBlock[]
   slots           BossStrategySlot[]
+  tasks           BossStrategyTask[]
   snapshots       ActivityStrategySnapshot[]
   activityTargets ActivityRaidTarget[]
 
@@ -547,6 +548,106 @@ model BossStrategySlot {
   @@map("boss_strategy_slots")
 }
 
+model StrategyTaskType {
+  id            Int                           @id @default(autoincrement())
+  code          String                        @unique(map: "uk_strategy_task_type_code") @db.VarChar(32)
+  label         String                        @db.VarChar(64)
+  isBuiltIn     Boolean                       @default(false) @map("is_built_in")
+  isActive      Boolean                       @default(true) @map("is_active")
+  createdAt     DateTime                      @default(now()) @map("created_at") @db.DateTime(0)
+  tasks         BossStrategyTask[]
+  snapshotTasks ActivityStrategySnapshotTask[]
+
+  @@index([isActive, isBuiltIn], map: "idx_strategy_task_type_active")
+  @@map("strategy_task_types")
+}
+
+model GameSpell {
+  id              Int                @id @default(autoincrement())
+  spellId         Int?               @unique(map: "uk_game_spell_spell_id") @map("spell_id") @db.UnsignedInt
+  name            String             @db.VarChar(128)
+  sourceType      String             @map("source_type") @db.VarChar(16)
+  classId         Int?               @map("class_id")
+  specId          Int?               @map("spec_id")
+  icon            String?            @db.VarChar(255)
+  dataSource      String?            @map("data_source") @db.VarChar(64)
+  isActive        Boolean            @default(true) @map("is_active")
+  createdAt       DateTime           @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt       DateTime           @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
+  encounterTasks  BossStrategyTask[] @relation("BossStrategyEncounterSpell")
+  playerTasks     BossStrategyTask[] @relation("BossStrategyPlayerSpell")
+  snapshotEncounterTasks ActivityStrategySnapshotTask[] @relation("SnapshotEncounterSpell")
+  snapshotPlayerTasks ActivityStrategySnapshotTask[] @relation("SnapshotPlayerSpell")
+
+  @@index([sourceType, isActive, name], map: "idx_game_spell_catalog")
+  @@map("game_spells")
+}
+
+model BossStrategyTask {
+  id                 BigInt              @id @default(autoincrement()) @db.UnsignedBigInt
+  versionId          BigInt              @map("version_id") @db.UnsignedBigInt
+  taskTypeId         Int                 @map("task_type_id")
+  kind               String              @db.VarChar(16)
+  orderIndex         Int                 @default(0) @map("order_index") @db.SmallInt
+  label              String              @db.VarChar(128)
+  encounterSpellId   Int?                @map("encounter_spell_id")
+  playerSpellId      Int?                @map("player_spell_id")
+  executorSlotKey    String              @map("executor_slot_key") @db.VarChar(64)
+  targetSlotKey      String?             @map("target_slot_key") @db.VarChar(64)
+  fallbackSlotKey    String?             @map("fallback_slot_key") @db.VarChar(64)
+  notes              String?             @db.VarChar(1000)
+  repeatRule         String?             @map("repeat_rule") @db.VarChar(64)
+  offsetMs           Int?                @map("offset_ms") @db.UnsignedInt
+  windowMs           Int?                @map("window_ms") @db.UnsignedInt
+  phaseLabel         String?             @map("phase_label") @db.VarChar(64)
+  occurrence         Int?                @db.UnsignedSmallInt
+  reminderMs         Int?                @map("reminder_ms") @db.UnsignedInt
+  version            BossStrategyVersion @relation(fields: [versionId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_boss_strategy_task_version")
+  taskType           StrategyTaskType    @relation(fields: [taskTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_boss_strategy_task_type")
+  encounterSpell     GameSpell?          @relation("BossStrategyEncounterSpell", fields: [encounterSpellId], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_boss_strategy_task_encounter_spell")
+  playerSpell        GameSpell?          @relation("BossStrategyPlayerSpell", fields: [playerSpellId], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_boss_strategy_task_player_spell")
+
+  @@index([versionId, kind, orderIndex], map: "idx_boss_strategy_task_order")
+  @@index([taskTypeId], map: "idx_boss_strategy_task_type")
+  @@index([encounterSpellId], map: "idx_boss_strategy_task_encounter_spell")
+  @@index([playerSpellId], map: "idx_boss_strategy_task_player_spell")
+  @@map("boss_strategy_tasks")
+}
+
+model ActivityStrategySnapshotTask {
+  id                         BigInt                     @id @default(autoincrement()) @db.UnsignedBigInt
+  snapshotId                 BigInt                     @map("snapshot_id") @db.UnsignedBigInt
+  sourceTaskId               BigInt?                    @map("source_task_id") @db.UnsignedBigInt
+  taskTypeId                 Int                        @map("task_type_id")
+  taskTypeLabelSnapshot      String                     @map("task_type_label_snapshot") @db.VarChar(64)
+  kind                       String                     @db.VarChar(16)
+  orderIndex                 Int                        @default(0) @map("order_index") @db.SmallInt
+  label                      String                     @db.VarChar(128)
+  encounterSpellId           Int?                       @map("encounter_spell_id")
+  encounterSpellNameSnapshot String?                    @map("encounter_spell_name_snapshot") @db.VarChar(128)
+  playerSpellId              Int?                       @map("player_spell_id")
+  playerSpellNameSnapshot    String?                    @map("player_spell_name_snapshot") @db.VarChar(128)
+  executorSlotKey            String                     @map("executor_slot_key") @db.VarChar(64)
+  targetSlotKey              String?                    @map("target_slot_key") @db.VarChar(64)
+  fallbackSlotKey            String?                    @map("fallback_slot_key") @db.VarChar(64)
+  notes                      String?                    @db.VarChar(1000)
+  repeatRule                 String?                    @map("repeat_rule") @db.VarChar(64)
+  offsetMs                   Int?                       @map("offset_ms") @db.UnsignedInt
+  windowMs                   Int?                       @map("window_ms") @db.UnsignedInt
+  phaseLabel                 String?                    @map("phase_label") @db.VarChar(64)
+  occurrence                 Int?                       @db.UnsignedSmallInt
+  reminderMs                 Int?                       @map("reminder_ms") @db.UnsignedInt
+  snapshot                   ActivityStrategySnapshot   @relation(fields: [snapshotId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_activity_strategy_task_snapshot")
+  taskType                   StrategyTaskType          @relation(fields: [taskTypeId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_activity_strategy_task_type")
+  encounterSpell             GameSpell?                 @relation("SnapshotEncounterSpell", fields: [encounterSpellId], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_activity_strategy_task_encounter_spell")
+  playerSpell                GameSpell?                 @relation("SnapshotPlayerSpell", fields: [playerSpellId], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_activity_strategy_task_player_spell")
+
+  @@index([snapshotId, kind, orderIndex], map: "idx_activity_strategy_task_order")
+  @@index([taskTypeId], map: "idx_activity_strategy_task_type")
+  @@index([sourceTaskId], map: "idx_activity_strategy_task_source")
+  @@map("activity_strategy_snapshot_tasks")
+}
+
 model ActivityRaidTarget {
   id                BigInt                    @id @default(autoincrement()) @db.UnsignedBigInt
   activityId        BigInt                    @map("activity_id") @db.UnsignedBigInt
@@ -582,6 +683,7 @@ model ActivityStrategySnapshot {
   locker          User?                           @relation("ActivityStrategySnapshotLocker", fields: [lockedBy], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_activity_strategy_snapshot_locker")
   blocks          ActivityStrategySnapshotBlock[]
   slots           ActivityStrategySnapshotSlot[]
+  tasks           ActivityStrategySnapshotTask[]
 
   @@index([sourceVersionId], map: "idx_activity_strategy_snapshot_source")
   @@map("activity_strategy_snapshots")

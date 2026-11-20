@@ -30,6 +30,30 @@ describe("raid activity strategy snapshots", () => {
                 markdown: "先躲技能",
               },
             ],
+            tasks: [
+              {
+                id: 7n,
+                taskTypeId: 1,
+                kind: "SEQUENCE",
+                orderIndex: 0,
+                label: "第一轮打断",
+                encounterSpellId: null,
+                encounterSpell: null,
+                playerSpellId: 8,
+                playerSpell: { name: "法术反制" },
+                executorSlotKey: "main-tank",
+                targetSlotKey: null,
+                fallbackSlotKey: null,
+                notes: "留意读条",
+                repeatRule: null,
+                offsetMs: null,
+                windowMs: null,
+                phaseLabel: null,
+                occurrence: null,
+                reminderMs: null,
+                taskType: { label: "打断" },
+              },
+            ],
             slots: [
               {
                 slotKey: "main-tank",
@@ -71,6 +95,17 @@ describe("raid activity strategy snapshots", () => {
         create: {
           sourceVersionId: 5n,
           blocks: { create: [expect.objectContaining({ sourceBlockId: 6n, markdown: "先躲技能" })] },
+          tasks: {
+            create: [
+              expect.objectContaining({
+                sourceTaskId: 7n,
+                taskTypeId: 1,
+                taskTypeLabelSnapshot: "打断",
+                playerSpellNameSnapshot: "法术反制",
+                executorSlotKey: "main-tank",
+              }),
+            ],
+          },
           slots: {
             create: expect.arrayContaining([
               expect.objectContaining({ slotKey: "main-tank", label: "主坦" }),

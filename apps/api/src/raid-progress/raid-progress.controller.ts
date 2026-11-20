@@ -4,7 +4,10 @@ import {
   bossStrategyCreateSchema,
   bossStrategyUpdateSchema,
   bossStrategyVersionSaveSchema,
+  gameSpellInputSchema,
+  gameSpellStatusSchema,
   idSchema,
+  strategyTaskTypeInputSchema,
 } from "@ttz/contracts";
 import { CurrentUser, MinPrivilege, Public } from "../auth/auth.decorators";
 import type { AuthUser } from "../auth/auth.types";
@@ -50,6 +53,44 @@ export class RaidProgressController {
     @Param("bossId", new ZodValidationPipe(idSchema)) bossId: string,
   ) {
     return this.service.getBossAttempts(BigInt(planId), BigInt(bossId));
+  }
+
+  @Get("task-catalog")
+  @MinPrivilege(1)
+  taskCatalog() {
+    return this.service.getStrategyTaskCatalog();
+  }
+
+  @Post("task-types")
+  @MinPrivilege(1)
+  createTaskType(@Body(new ZodValidationPipe(strategyTaskTypeInputSchema)) body: { code: string; label: string }) {
+    return this.service.createStrategyTaskType(body);
+  }
+
+  @Post("game-spells")
+  @MinPrivilege(1)
+  createGameSpell(
+    @Body(new ZodValidationPipe(gameSpellInputSchema)) body: Parameters<RaidProgressService["createGameSpell"]>[0],
+  ) {
+    return this.service.createGameSpell(body);
+  }
+
+  @Patch("game-spells/:id")
+  @MinPrivilege(1)
+  updateGameSpell(
+    @Param("id", new ZodValidationPipe(idSchema)) id: string,
+    @Body(new ZodValidationPipe(gameSpellInputSchema)) body: Parameters<RaidProgressService["updateGameSpell"]>[1],
+  ) {
+    return this.service.updateGameSpell(Number(id), body);
+  }
+
+  @Patch("game-spells/:id/status")
+  @MinPrivilege(1)
+  setGameSpellStatus(
+    @Param("id", new ZodValidationPipe(idSchema)) id: string,
+    @Body(new ZodValidationPipe(gameSpellStatusSchema)) body: { isActive: boolean },
+  ) {
+    return this.service.setGameSpellActive(Number(id), body.isActive);
   }
 
   @Get("strategies/manage")

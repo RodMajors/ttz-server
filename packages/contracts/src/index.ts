@@ -322,6 +322,7 @@ export const raidActivityDetailSchema = z.object({
           ),
         })
         .nullable(),
+      tasks: z.array(z.lazy(() => strategyTaskDtoSchema)),
       blocks: z.array(
         z.object({
           type: z.string(),
@@ -834,6 +835,7 @@ export const strategyVersionDtoSchema = z.object({
   changeSummary: z.string().nullable(),
   createdAt: isoDateTimeSchema,
   publishedAt: isoDateTimeSchema.nullable(),
+  tasks: z.array(z.lazy(() => strategyTaskDtoSchema)),
   blocks: z.array(
     z.object({
       id: idSchema,
@@ -855,6 +857,85 @@ export const strategyVersionDtoSchema = z.object({
     }),
   ),
 });
+export const gameSpellInputSchema = z.object({
+  spellId: z.number().int().positive().nullable().optional(),
+  name: z.string().trim().min(1).max(128),
+  sourceType: z.enum(["ENCOUNTER", "PLAYER"]),
+  classId: z.number().int().positive().nullable().optional(),
+  specId: z.number().int().positive().nullable().optional(),
+  icon: z.string().trim().max(255).nullable().optional(),
+  dataSource: z.string().trim().max(64).nullable().optional(),
+});
+export const strategyTaskTypeInputSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .min(2)
+    .max(32)
+    .regex(/^[A-Z][A-Z0-9_]*$/),
+  label: z.string().trim().min(1).max(64),
+});
+export const strategyTaskInputSchema = z.object({
+  taskTypeId: z.number().int().positive(),
+  kind: z.enum(["SEQUENCE", "TIMELINE"]),
+  orderIndex: z.number().int().min(0).max(500),
+  label: z.string().trim().min(1).max(128),
+  encounterSpellId: z.number().int().positive().nullable().optional(),
+  playerSpellId: z.number().int().positive().nullable().optional(),
+  executorSlotKey: z.string().trim().min(1).max(64),
+  targetSlotKey: z.string().trim().min(1).max(64).nullable().optional(),
+  fallbackSlotKey: z.string().trim().min(1).max(64).nullable().optional(),
+  notes: z.string().trim().max(1000).nullable().optional(),
+  repeatRule: z.string().trim().max(64).nullable().optional(),
+  offsetMs: z.number().int().min(0).max(86_400_000).nullable().optional(),
+  windowMs: z.number().int().min(1).max(86_400_000).nullable().optional(),
+  phaseLabel: z.string().trim().max(64).nullable().optional(),
+  occurrence: z.number().int().min(1).max(65535).nullable().optional(),
+  reminderMs: z.number().int().min(0).max(86_400_000).nullable().optional(),
+});
+export const strategyTaskListSchema = z.array(strategyTaskInputSchema).superRefine((tasks, context) => {
+  const ordering = tasks.map((task) => `${task.kind}:${task.orderIndex}`);
+  if (new Set(ordering).size !== ordering.length)
+    context.addIssue({ code: "custom", path: [], message: "同一种任务模式内顺序不能重复" });
+  for (const [index, task] of tasks.entries()) {
+    if (task.kind === "TIMELINE" && task.offsetMs == null)
+      context.addIssue({ code: "custom", path: [index, "offsetMs"], message: "时间轴任务必须填写相对战斗开始的时间" });
+    if (task.kind === "SEQUENCE" && task.offsetMs != null)
+      context.addIssue({ code: "custom", path: [index, "offsetMs"], message: "顺序分配不应填写时间轴偏移" });
+  }
+});
+export type StrategyTaskInput = z.infer<typeof strategyTaskInputSchema>;
+export const strategyTaskDtoSchema = strategyTaskInputSchema.extend({
+  id: idSchema,
+  taskTypeCode: z.string(),
+  taskTypeLabel: z.string(),
+  encounterSpellName: z.string().nullable(),
+  playerSpellName: z.string().nullable(),
+});
+export const strategyTaskCatalogSchema = z.object({
+  taskTypes: z.array(z.object({ id: z.number().int(), code: z.string(), label: z.string(), isBuiltIn: z.boolean() })),
+  spells: z.array(
+    z.object({
+      id: z.number().int(),
+      spellId: z.number().int().nullable(),
+      name: z.string(),
+      sourceType: z.enum(["ENCOUNTER", "PLAYER"]),
+      classId: z.number().int().nullable(),
+      specId: z.number().int().nullable(),
+      icon: z.string().nullable(),
+      dataSource: z.string().nullable(),
+      isActive: z.boolean(),
+    }),
+  ),
+});
+export const strategyTaskTypeSchema = z.object({ id: z.number().int(), code: z.string(), label: z.string() });
+export const gameSpellSchema = z.object({
+  id: z.number().int(),
+  name: z.string(),
+  sourceType: z.enum(["ENCOUNTER", "PLAYER"]),
+});
+export const gameSpellStatusSchema = z.object({ isActive: z.boolean() });
+
 export const bossStrategyVersionSaveSchema = z.object({
   changeSummary: z.string().trim().max(500).nullable().optional(),
   slots: z
@@ -874,6 +955,7 @@ export const bossStrategyVersionSaveSchema = z.object({
     )
     .max(200)
     .refine((slots) => new Set(slots.map((slot) => slot.slotKey)).size === slots.length, "槽位键不能重复"),
+  tasks: strategyTaskListSchema.default([]),
   blocks: z
     .array(
       z.object({

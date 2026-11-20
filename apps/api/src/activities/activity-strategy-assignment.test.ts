@@ -197,4 +197,53 @@ describe("activity roster snapshot locking", () => {
     );
     expect(activityLock).toHaveBeenCalledTimes(1);
   });
+  it("refuses to lock a roster when a required task executor or backup slot is unassigned", async () => {
+    const lockSnapshots = vi.fn();
+    const prisma = {
+      activity: {
+        findFirst: vi
+          .fn()
+          .mockResolvedValue({ id: 10n, creator: 7n, status: 1, rosterLockedAt: null, version: 2, isDeleted: 0 }),
+      },
+      $transaction: vi.fn(async (callback: (tx: unknown) => unknown) =>
+        callback({
+          activity: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+          activityStrategySnapshot: {
+            findMany: vi
+              .fn()
+              .mockResolvedValue([
+                {
+                  slots: [],
+                  tasks: [
+                    {
+                      label: "外部减伤",
+                      executorSlotKey: "healer-1",
+                      fallbackSlotKey: null,
+                      targetSlotKey: null,
+                      playerSpell: null,
+                    },
+                  ],
+                },
+              ]),
+            updateMany: lockSnapshots,
+          },
+          activityStrategySnapshotSlot: { update: vi.fn(), updateMany: vi.fn() },
+        }),
+      ),
+    } as unknown as PrismaService;
+
+    await expect(
+      new ActivitiesService(prisma).lockRoster(10n, {
+        id: 7n,
+        privilege: 0,
+        name: "Leader",
+        wxNickname: null,
+        guildNickname: null,
+        isApproved: true,
+        profileComplete: true,
+        status: 1,
+      }),
+    ).rejects.toMatchObject({ response: { code: "STRATEGY_TASK_EXECUTOR_UNBOUND" } });
+    expect(lockSnapshots).not.toHaveBeenCalled();
+  });
 });

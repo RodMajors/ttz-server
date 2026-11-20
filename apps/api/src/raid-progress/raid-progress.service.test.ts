@@ -2,7 +2,12 @@ import { ConflictException } from "@nestjs/common";
 import { WarcraftLogsClient } from "@ttz/warcraft-logs";
 import { describe, expect, it, vi } from "vitest";
 import type { PrismaService } from "../database/prisma.service";
-import { bestPhaseProgress, progressionPullPhases, RaidProgressService } from "./raid-progress.service";
+import {
+  bestPhaseProgress,
+  findTimelineConflicts,
+  progressionPullPhases,
+  RaidProgressService,
+} from "./raid-progress.service";
 
 describe("RaidProgressService", () => {
   it("includes a source WCL report and fight link for each attempt", async () => {
@@ -312,6 +317,7 @@ describe("RaidProgressService", () => {
       strategy: { id: 4n, name: "草稿方案", boss: { id: 3n, name: "Boss" } },
       blocks: [],
       slots: [],
+      tasks: [],
     };
     const prisma = {
       bossStrategyVersion: { findUnique: vi.fn().mockResolvedValueOnce(version).mockResolvedValueOnce(fullVersion) },
@@ -320,6 +326,7 @@ describe("RaidProgressService", () => {
           bossStrategyVersion: { update: vi.fn() },
           bossStrategyBlock: { deleteMany: vi.fn() },
           bossStrategySlot: { deleteMany: vi.fn() },
+          bossStrategyTask: { deleteMany: vi.fn() },
         }),
       ),
     } as unknown as PrismaService;
@@ -399,5 +406,105 @@ describe("RaidProgressService", () => {
       expect.objectContaining({ where: { progressPlanId: 2n, bossId: 3n, defaultStrategyId: 9n } }),
     );
     expect(updateStrategy).toHaveBeenCalledWith({ where: { id: 9n }, data: { status: "ARCHIVED" } });
+  });
+  it("detects overlapping timeline windows for the same executor only", () => {
+    const base = {
+      taskTypeId: 1,
+      kind: "TIMELINE" as const,
+      orderIndex: 0,
+      label: "机制处理",
+      executorSlotKey: "interrupt-1",
+      offsetMs: 10_000,
+      windowMs: 5_000,
+    };
+    expect(
+      findTimelineConflicts([
+        base,
+        { ...base, orderIndex: 1, offsetMs: 14_000 },
+        { ...base, orderIndex: 2, executorSlotKey: "interrupt-2", offsetMs: 12_000 },
+        { ...base, orderIndex: 3, offsetMs: 20_000 },
+      ]),
+    ).toEqual([{ executorSlotKey: "interrupt-1", firstOrderIndex: 0, secondOrderIndex: 1 }]);
+  });
+
+  it("saves normalized sequence and timeline task rows with validated slot references", async () => {
+    const createTasks = vi.fn();
+    const version = { id: 12n, status: "DRAFT" };
+    const saved = {
+      id: 12n,
+      strategyId: 4n,
+      versionNo: 1,
+      status: "DRAFT",
+      changeSummary: "加上打断顺序",
+      createdAt: new Date("2026-11-21T00:00:00Z"),
+      publishedAt: null,
+      strategy: { id: 4n, name: "方案", boss: { id: 3n, name: "Boss" } },
+      blocks: [],
+      slots: [
+        { id: 1n, slotKey: "interrupt-1", label: "打断 1", roleConstraint: null, isRequired: true, orderIndex: 0 },
+      ],
+      tasks: [
+        {
+          id: 2n,
+          taskTypeId: 1,
+          taskType: { code: "INTERRUPT", label: "打断" },
+          kind: "SEQUENCE",
+          orderIndex: 0,
+          label: "第一轮打断",
+          encounterSpellId: null,
+          encounterSpell: null,
+          playerSpellId: null,
+          playerSpell: null,
+          executorSlotKey: "interrupt-1",
+          targetSlotKey: null,
+          fallbackSlotKey: null,
+          notes: "等读条",
+          repeatRule: null,
+          offsetMs: null,
+          windowMs: null,
+          phaseLabel: null,
+          occurrence: null,
+          reminderMs: null,
+        },
+      ],
+    };
+    const prisma = {
+      bossStrategyVersion: { findUnique: vi.fn().mockResolvedValueOnce(version).mockResolvedValueOnce(saved) },
+      strategyTaskType: { findMany: vi.fn().mockResolvedValue([{ id: 1 }]) },
+      gameSpell: { findMany: vi.fn() },
+      $transaction: vi.fn(async (callback) =>
+        callback({
+          bossStrategyVersion: { update: vi.fn() },
+          bossStrategyBlock: { deleteMany: vi.fn() },
+          bossStrategySlot: { deleteMany: vi.fn(), createMany: vi.fn() },
+          bossStrategyTask: { deleteMany: vi.fn(), createMany: createTasks },
+        }),
+      ),
+    } as unknown as PrismaService;
+
+    const result = await new RaidProgressService(prisma).saveDraftVersion(12n, {
+      changeSummary: "加上打断顺序",
+      blocks: [],
+      slots: [{ slotKey: "interrupt-1", label: "打断 1", isRequired: true, orderIndex: 0 }],
+      tasks: [
+        {
+          taskTypeId: 1,
+          kind: "SEQUENCE",
+          orderIndex: 0,
+          label: "第一轮打断",
+          executorSlotKey: "interrupt-1",
+          notes: "等读条",
+        },
+      ],
+    });
+
+    expect(result.tasks).toMatchObject([
+      { taskTypeCode: "INTERRUPT", executorSlotKey: "interrupt-1", notes: "等读条" },
+    ]);
+    expect(createTasks).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({ versionId: 12n, taskTypeId: 1, kind: "SEQUENCE", executorSlotKey: "interrupt-1" }),
+      ],
+    });
   });
 });

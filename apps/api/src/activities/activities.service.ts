@@ -87,6 +87,10 @@ export class ActivitiesService {
               include: {
                 blocks: { orderBy: { orderIndex: "asc" } },
                 slots: { orderBy: [{ groupNo: "asc" }, { positionNo: "asc" }, { orderIndex: "asc" }] },
+                tasks: {
+                  include: { taskType: true, encounterSpell: true, playerSpell: true },
+                  orderBy: [{ kind: "asc" }, { orderIndex: "asc" }],
+                },
               },
             },
           },
@@ -173,6 +177,7 @@ export class ActivitiesService {
                     })),
                   }
                 : null,
+              tasks: target.strategySnapshot?.tasks.map(serializeSnapshotTaskForActivity) ?? [],
               blocks:
                 target.strategySnapshot?.blocks.map((block) => ({
                   type: block.type,
@@ -242,6 +247,7 @@ export class ActivitiesService {
                         createdBy: user.id,
                         blocks: { create: target.blocks },
                         slots: { create: [...target.slots, ...buildTeamSeatSlots()] },
+                        tasks: { create: target.tasks },
                       },
                     },
                   })),
@@ -270,6 +276,10 @@ export class ActivitiesService {
             strategy: { select: { bossId: true } },
             blocks: { orderBy: { orderIndex: "asc" } },
             slots: { orderBy: { orderIndex: "asc" } },
+            tasks: {
+              include: { taskType: true, encounterSpell: true, playerSpell: true },
+              orderBy: [{ kind: "asc" }, { orderIndex: "asc" }],
+            },
           },
         })
       : [];
@@ -304,6 +314,29 @@ export class ActivitiesService {
             roleConstraint: slot.roleConstraint,
             isRequired: slot.isRequired,
             orderIndex: slot.orderIndex,
+          })) ?? [],
+        tasks:
+          version?.tasks.map((task) => ({
+            sourceTaskId: task.id,
+            taskTypeId: task.taskTypeId,
+            taskTypeLabelSnapshot: task.taskType.label,
+            kind: task.kind,
+            orderIndex: task.orderIndex,
+            label: task.label,
+            encounterSpellId: task.encounterSpellId,
+            encounterSpellNameSnapshot: task.encounterSpell?.name ?? null,
+            playerSpellId: task.playerSpellId,
+            playerSpellNameSnapshot: task.playerSpell?.name ?? null,
+            executorSlotKey: task.executorSlotKey,
+            targetSlotKey: task.targetSlotKey,
+            fallbackSlotKey: task.fallbackSlotKey,
+            notes: task.notes,
+            repeatRule: task.repeatRule,
+            offsetMs: task.offsetMs,
+            windowMs: task.windowMs,
+            phaseLabel: task.phaseLabel,
+            occurrence: task.occurrence,
+            reminderMs: task.reminderMs,
           })) ?? [],
       };
     });
@@ -656,6 +689,7 @@ export class ActivitiesService {
             where: { signupId: { not: null } },
             include: { signup: { include: { user: true, character: { include: characterInclude }, specs: true } } },
           },
+          tasks: { include: { playerSpell: true } },
         },
       });
       const assignedSlots = snapshots.flatMap((snapshot) => snapshot.slots);
@@ -669,6 +703,38 @@ export class ActivitiesService {
           code: "STRATEGY_SIGNUP_INVALID",
           message: "存在已失效的战术人员绑定，请调整后再锁定",
         });
+      }
+      for (const snapshot of snapshots) {
+        const bySlotKey = new Map(snapshot.slots.map((slot) => [slot.slotKey, slot]));
+        for (const task of snapshot.tasks ?? []) {
+          const requiredKeys = [task.executorSlotKey, task.fallbackSlotKey, task.targetSlotKey].filter(
+            (key): key is string => Boolean(key),
+          );
+          const unboundKey = requiredKeys.find((key) => !bySlotKey.get(key)?.signup);
+          if (unboundKey) {
+            throw new ConflictException({
+              code: "STRATEGY_TASK_EXECUTOR_UNBOUND",
+              message: `任务“${task.label}”的槽位 ${unboundKey} 尚未绑定有效报名，无法锁定名单`,
+            });
+          }
+          const executor = bySlotKey.get(task.executorSlotKey)?.signup;
+          if (
+            executor &&
+            task.playerSpell?.classId != null &&
+            executor.character.classId !== task.playerSpell.classId
+          ) {
+            throw new ConflictException({
+              code: "STRATEGY_TASK_SKILL_CLASS_MISMATCH",
+              message: `任务“${task.label}”的玩家技能不适用于指定执行者职业`,
+            });
+          }
+          if (executor && task.playerSpell?.specId != null && executor.preferredSpecId !== task.playerSpell.specId) {
+            throw new ConflictException({
+              code: "STRATEGY_TASK_SKILL_SPEC_MISMATCH",
+              message: `任务“${task.label}”的玩家技能不适用于指定执行者专精`,
+            });
+          }
+        }
       }
       for (const slot of assignedSlots) {
         const signup = slot.signup;
@@ -957,4 +1023,52 @@ function buildTeamSeatSlots() {
       };
     }),
   ).flat();
+}
+
+function serializeSnapshotTaskForActivity(task: {
+  id: bigint;
+  taskTypeId: number;
+  taskTypeLabelSnapshot: string;
+  taskType: { code: string };
+  kind: string;
+  orderIndex: number;
+  label: string;
+  encounterSpellId: number | null;
+  encounterSpellNameSnapshot: string | null;
+  playerSpellId: number | null;
+  playerSpellNameSnapshot: string | null;
+  executorSlotKey: string;
+  targetSlotKey: string | null;
+  fallbackSlotKey: string | null;
+  notes: string | null;
+  repeatRule: string | null;
+  offsetMs: number | null;
+  windowMs: number | null;
+  phaseLabel: string | null;
+  occurrence: number | null;
+  reminderMs: number | null;
+}) {
+  return {
+    id: task.id.toString(),
+    taskTypeId: task.taskTypeId,
+    taskTypeCode: task.taskType.code,
+    taskTypeLabel: task.taskTypeLabelSnapshot,
+    kind: task.kind,
+    orderIndex: task.orderIndex,
+    label: task.label,
+    encounterSpellId: task.encounterSpellId,
+    encounterSpellName: task.encounterSpellNameSnapshot,
+    playerSpellId: task.playerSpellId,
+    playerSpellName: task.playerSpellNameSnapshot,
+    executorSlotKey: task.executorSlotKey,
+    targetSlotKey: task.targetSlotKey,
+    fallbackSlotKey: task.fallbackSlotKey,
+    notes: task.notes,
+    repeatRule: task.repeatRule,
+    offsetMs: task.offsetMs,
+    windowMs: task.windowMs,
+    phaseLabel: task.phaseLabel,
+    occurrence: task.occurrence,
+    reminderMs: task.reminderMs,
+  };
 }
