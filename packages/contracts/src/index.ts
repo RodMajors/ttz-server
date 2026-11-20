@@ -929,6 +929,81 @@ export const strategyTaskCatalogSchema = z.object({
   ),
 });
 export const strategyTaskTypeSchema = z.object({ id: z.number().int(), code: z.string(), label: z.string() });
+export const positioningColorSchema = z.enum(["red", "orange", "yellow", "green", "blue", "purple", "white", "black"]);
+export const positioningShapeSchema = z.discriminatedUnion("type", [
+  z.object({
+    id: z.string().min(1).max(64),
+    type: z.literal("circle"),
+    x: z.number().min(0).max(2000),
+    y: z.number().min(0).max(2000),
+    radius: z.number().min(4).max(200),
+    color: positioningColorSchema,
+    fill: z.boolean(),
+  }),
+  z.object({
+    id: z.string().min(1).max(64),
+    type: z.literal("rect"),
+    x: z.number().min(0).max(2000),
+    y: z.number().min(0).max(2000),
+    width: z.number().min(8).max(1000),
+    height: z.number().min(8).max(1000),
+    color: positioningColorSchema,
+    fill: z.boolean(),
+  }),
+  z.object({
+    id: z.string().min(1).max(64),
+    type: z.literal("line"),
+    points: z
+      .array(z.number().min(0).max(2000))
+      .min(4)
+      .max(20)
+      .refine((points) => points.length % 2 === 0, "连线坐标必须成对"),
+    color: positioningColorSchema,
+    strokeWidth: z.number().min(1).max(16),
+  }),
+  z.object({
+    id: z.string().min(1).max(64),
+    type: z.literal("arrow"),
+    points: z
+      .array(z.number().min(0).max(2000))
+      .min(4)
+      .max(20)
+      .refine((points) => points.length % 2 === 0, "箭头坐标必须成对"),
+    color: positioningColorSchema,
+    strokeWidth: z.number().min(1).max(16),
+  }),
+  z.object({
+    id: z.string().min(1).max(64),
+    type: z.literal("text"),
+    x: z.number().min(0).max(2000),
+    y: z.number().min(0).max(2000),
+    text: z.string().trim().min(1).max(120),
+    color: positioningColorSchema,
+    fontSize: z.number().int().min(10).max(64),
+  }),
+  z.object({
+    id: z.string().min(1).max(64),
+    type: z.literal("slot"),
+    x: z.number().min(0).max(2000),
+    y: z.number().min(0).max(2000),
+    slotKey: z.string().min(1).max(64),
+    color: positioningColorSchema,
+  }),
+]);
+export const positioningCanvasSchema = z.object({
+  schemaVersion: z.literal(1),
+  width: z.number().int().min(320).max(2000),
+  height: z.number().int().min(320).max(2000),
+  background: z.enum(["CIRCLE_ARENA", "SQUARE_ARENA", "HEX_ARENA", "PLAIN", "CUSTOM_IMAGE"]),
+  imageUrl: z.string().url().max(1024).nullable(),
+  shapes: z.array(positioningShapeSchema).max(200),
+});
+export const activityStrategyPositioningSaveSchema = z.object({
+  revision: z.number().int().min(1),
+  canvas: positioningCanvasSchema,
+});
+export type PositioningCanvas = z.infer<typeof positioningCanvasSchema>;
+
 export const gameSpellSchema = z.object({
   id: z.number().int(),
   name: z.string(),

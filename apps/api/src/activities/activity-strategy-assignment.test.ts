@@ -209,22 +209,20 @@ describe("activity roster snapshot locking", () => {
         callback({
           activity: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
           activityStrategySnapshot: {
-            findMany: vi
-              .fn()
-              .mockResolvedValue([
-                {
-                  slots: [],
-                  tasks: [
-                    {
-                      label: "外部减伤",
-                      executorSlotKey: "healer-1",
-                      fallbackSlotKey: null,
-                      targetSlotKey: null,
-                      playerSpell: null,
-                    },
-                  ],
-                },
-              ]),
+            findMany: vi.fn().mockResolvedValue([
+              {
+                slots: [],
+                tasks: [
+                  {
+                    label: "外部减伤",
+                    executorSlotKey: "healer-1",
+                    fallbackSlotKey: null,
+                    targetSlotKey: null,
+                    playerSpell: null,
+                  },
+                ],
+              },
+            ]),
             updateMany: lockSnapshots,
           },
           activityStrategySnapshotSlot: { update: vi.fn(), updateMany: vi.fn() },
@@ -245,5 +243,54 @@ describe("activity roster snapshot locking", () => {
       }),
     ).rejects.toMatchObject({ response: { code: "STRATEGY_TASK_EXECUTOR_UNBOUND" } });
     expect(lockSnapshots).not.toHaveBeenCalled();
+  });
+  it("stores a validated positioning canvas under the activity snapshot revision", async () => {
+    const activityUpdate = vi.fn().mockResolvedValue({ count: 1 });
+    const snapshotUpdate = vi.fn().mockResolvedValue({ count: 1 });
+    const blockCreate = vi.fn().mockResolvedValue({ id: 80n });
+    const prisma = {
+      activity: {
+        findFirst: vi
+          .fn()
+          .mockResolvedValue({ id: 10n, creator: 7n, status: 1, rosterLockedAt: null, version: 3, isDeleted: 0 }),
+      },
+      activityStrategySnapshot: {
+        findFirst: vi
+          .fn()
+          .mockResolvedValue({ id: 20n, status: "EDITING", revision: 4, slots: [{ slotKey: "main-tank" }] }),
+      },
+      $transaction: vi.fn(async (callback: (tx: unknown) => unknown) =>
+        callback({
+          activity: { updateMany: activityUpdate },
+          activityStrategySnapshot: { updateMany: snapshotUpdate },
+          activityStrategySnapshotBlock: { findFirst: vi.fn().mockResolvedValue(null), create: blockCreate },
+        }),
+      ),
+    } as unknown as PrismaService;
+    const canvas = {
+      schemaVersion: 1 as const,
+      width: 1000,
+      height: 700,
+      background: "CIRCLE_ARENA" as const,
+      imageUrl: null,
+      shapes: [{ id: "tank", type: "slot" as const, x: 400, y: 300, slotKey: "main-tank", color: "blue" as const }],
+    };
+
+    await expect(
+      new RaidProgressService(prisma).saveSnapshotPositioning(10n, 20n, { revision: 4, canvas }, admin),
+    ).resolves.toEqual({
+      snapshotId: "20",
+      revision: 5,
+      updated: true,
+    });
+    expect(snapshotUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 20n, revision: 4, status: "EDITING" } }),
+    );
+    expect(blockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ snapshotId: 20n, type: "POSITIONING", config: canvas }),
+      }),
+    );
+    expect(activityUpdate).toHaveBeenCalledTimes(1);
   });
 });

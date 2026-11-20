@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Inject, Param, Patch, Post, Put } from "@nestjs/common";
 import {
   activityStrategyAssignmentsSchema,
+  activityStrategyPositioningSaveSchema,
   bossStrategyCreateSchema,
   bossStrategyUpdateSchema,
   bossStrategyVersionSaveSchema,
@@ -107,6 +108,18 @@ export class RaidProgressController {
   @Get("activities/:id/snapshots")
   snapshots(@Param("id", new ZodValidationPipe(idSchema)) id: string, @CurrentUser() user: AuthUser) {
     return this.service.listSnapshots(BigInt(id), user);
+  }
+
+  @Put("activities/:activityId/snapshots/:snapshotId/positioning")
+  saveSnapshotPositioning(
+    @Param("activityId", new ZodValidationPipe(idSchema)) activityId: string,
+    @Param("snapshotId", new ZodValidationPipe(idSchema)) snapshotId: string,
+    @Body(new ZodValidationPipe(activityStrategyPositioningSaveSchema)) body: Parameters<
+      RaidProgressService["saveSnapshotPositioning"]
+    >[2],
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.saveSnapshotPositioning(BigInt(activityId), BigInt(snapshotId), body, user);
   }
 
   @Put("activities/:activityId/snapshots/:snapshotId/assignments")

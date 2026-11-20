@@ -6,7 +6,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import type { ActivityStrategyAssignmentsInput, StrategyTaskInput } from "@ttz/contracts";
+import type { ActivityStrategyAssignmentsInput, PositioningCanvas, StrategyTaskInput } from "@ttz/contracts";
 import type { Prisma } from "@ttz/database";
 import { WarcraftLogsClient, type WclFightMetricGraph, type WclFightMetricPoint } from "@ttz/warcraft-logs";
 import { assetUrl } from "../common/asset-url";
@@ -799,6 +799,58 @@ export class RaidProgressService {
         publishedAt: version.publishedAt?.toISOString() ?? null,
       })),
     }));
+  }
+
+  async saveSnapshotPositioning(
+    activityId: bigint,
+    snapshotId: bigint,
+    input: { revision: number; canvas: PositioningCanvas },
+    editor: { id: bigint; privilege: number },
+  ) {
+    const activity = await this.prisma.activity.findFirst({ where: { id: activityId, isDeleted: 0 } });
+    if (!activity) throw new NotFoundException({ code: "ACTIVITY_NOT_FOUND", message: "活动不存在" });
+    if (activity.creator !== editor.id && editor.privilege < 1)
+      throw new ForbiddenException({ code: "ACTIVITY_NOT_OWNED", message: "只能编辑自己负责活动的战术快照" });
+    if (activity.status >= 2 || activity.rosterLockedAt)
+      throw new ConflictException({ code: "ACTIVITY_ROSTER_LOCKED", message: "活动名单或站位快照已锁定" });
+    const snapshot = await this.prisma.activityStrategySnapshot.findFirst({
+      where: { id: snapshotId, target: { activityId } },
+      select: { id: true, status: true, revision: true, slots: { select: { slotKey: true } } },
+    });
+    if (!snapshot) throw new NotFoundException({ code: "STRATEGY_SNAPSHOT_NOT_FOUND", message: "战术快照不存在" });
+    if (snapshot.status !== "EDITING")
+      throw new ConflictException({ code: "STRATEGY_SNAPSHOT_LOCKED", message: "战术快照已锁定" });
+    const availableSlotKeys = new Set(snapshot.slots.map((slot) => slot.slotKey));
+    if (input.canvas.shapes.some((shape) => shape.type === "slot" && !availableSlotKeys.has(shape.slotKey)))
+      throw new ConflictException({ code: "POSITIONING_SLOT_INVALID", message: "站位图中包含当前快照不存在的槽位" });
+    return this.prisma.$transaction(async (tx) => {
+      const activityUpdated = await tx.activity.updateMany({
+        where: { id: activityId, version: activity.version, rosterLockedAt: null, status: { lt: 2 } },
+        data: { version: { increment: 1 } },
+      });
+      if (!activityUpdated.count)
+        throw new ConflictException({ code: "VERSION_CONFLICT", message: "活动名单已变化，请刷新后重试" });
+      const snapshotUpdated = await tx.activityStrategySnapshot.updateMany({
+        where: { id: snapshotId, revision: input.revision, status: "EDITING" },
+        data: { revision: { increment: 1 } },
+      });
+      if (!snapshotUpdated.count)
+        throw new ConflictException({ code: "VERSION_CONFLICT", message: "站位画板已被其他人修改，请刷新后重试" });
+      const block = await tx.activityStrategySnapshotBlock.findFirst({
+        where: { snapshotId, type: "POSITIONING" },
+        orderBy: { orderIndex: "asc" },
+        select: { id: true },
+      });
+      const config = input.canvas as unknown as Prisma.InputJsonValue;
+      if (block) {
+        await tx.activityStrategySnapshotBlock.update({ where: { id: block.id }, data: { config, schemaVersion: 1 } });
+      } else {
+        await tx.activityStrategySnapshotBlock.create({
+          data: { snapshotId, type: "POSITIONING", title: "站位画板", orderIndex: 0, schemaVersion: 1, config },
+        });
+      }
+      return { snapshotId: snapshotId.toString(), revision: input.revision + 1, updated: true };
+    });
   }
 
   async saveSnapshotAssignments(
