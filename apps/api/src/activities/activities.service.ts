@@ -83,7 +83,12 @@ export class ActivitiesService {
           include: {
             boss: true,
             strategyVersion: { include: { strategy: true } },
-            strategySnapshot: { include: { blocks: { orderBy: { orderIndex: "asc" } } } },
+            strategySnapshot: {
+              include: {
+                blocks: { orderBy: { orderIndex: "asc" } },
+                slots: { orderBy: [{ groupNo: "asc" }, { positionNo: "asc" }, { orderIndex: "asc" }] },
+              },
+            },
           },
         },
       },
@@ -147,6 +152,27 @@ export class ActivitiesService {
               strategyName: target.strategyVersion?.strategy.name ?? "空白战术",
               strategyVersionNo: target.strategyVersion?.versionNo ?? null,
               strategySnapshotId: target.strategySnapshot?.id.toString() ?? null,
+              snapshot: target.strategySnapshot
+                ? {
+                    id: target.strategySnapshot.id.toString(),
+                    status: target.strategySnapshot.status,
+                    revision: target.strategySnapshot.revision,
+                    lockedAt: target.strategySnapshot.lockedAt?.toISOString() ?? null,
+                    slots: target.strategySnapshot.slots.map((slot) => ({
+                      slotKey: slot.slotKey,
+                      label: slot.label,
+                      groupNo: slot.groupNo,
+                      positionNo: slot.positionNo,
+                      signupId: slot.signupId?.toString() ?? null,
+                      userName: slot.userNameSnapshot,
+                      characterName: slot.characterName,
+                      realmName: slot.realmName,
+                      classId: slot.classIdSnapshot,
+                      className: slot.className,
+                      specName: slot.specName,
+                    })),
+                  }
+                : null,
               blocks:
                 target.strategySnapshot?.blocks.map((block) => ({
                   type: block.type,
@@ -215,7 +241,7 @@ export class ActivitiesService {
                         sourceVersionId: target.versionId,
                         createdBy: user.id,
                         blocks: { create: target.blocks },
-                        slots: { create: target.slots },
+                        slots: { create: [...target.slots, ...buildTeamSeatSlots()] },
                       },
                     },
                   })),
@@ -612,18 +638,97 @@ export class ActivitiesService {
   }
 
   async lockRoster(id: bigint, user: AuthUser) {
-    await this.requireManageable(id, user);
-    return this.prisma.activity.update({
-      where: { id },
-      data: { rosterLockedAt: new Date(), version: { increment: 1 } },
+    const activity = await this.requireManageable(id, user);
+    if (activity.status >= 2)
+      throw new ConflictException({ code: "ACTIVITY_READ_ONLY", message: "已结束或已取消的活动不能锁定名单" });
+    if (activity.rosterLockedAt) return { rosterLockedAt: activity.rosterLockedAt.toISOString() };
+    const lockedAt = new Date();
+    return this.prisma.$transaction(async (transaction) => {
+      const activityLocked = await transaction.activity.updateMany({
+        where: { id, version: activity.version, rosterLockedAt: null, status: { lt: 2 } },
+        data: { rosterLockedAt: lockedAt, version: { increment: 1 } },
+      });
+      if (!activityLocked.count) throw versionConflict();
+      const snapshots = await transaction.activityStrategySnapshot.findMany({
+        where: { target: { activityId: id } },
+        include: {
+          slots: {
+            where: { signupId: { not: null } },
+            include: { signup: { include: { user: true, character: { include: characterInclude }, specs: true } } },
+          },
+        },
+      });
+      const assignedSlots = snapshots.flatMap((snapshot) => snapshot.slots);
+      if (
+        assignedSlots.some(
+          (slot) =>
+            !slot.signup || ![signupStatusToCode.CONFIRMED, signupStatusToCode.BENCH].includes(slot.signup.status),
+        )
+      ) {
+        throw new ConflictException({
+          code: "STRATEGY_SIGNUP_INVALID",
+          message: "存在已失效的战术人员绑定，请调整后再锁定",
+        });
+      }
+      for (const slot of assignedSlots) {
+        const signup = slot.signup;
+        if (!signup) continue;
+        await transaction.activityStrategySnapshotSlot.update({
+          where: { id: slot.id },
+          data: {
+            userIdSnapshot: signup.userId,
+            userNameSnapshot: signup.user.guildNickname ?? signup.user.name ?? "TTZ 成员",
+            characterIdSnapshot: signup.character.id,
+            characterName: signup.character.name,
+            realmName: signup.character.serverName,
+            classIdSnapshot: signup.character.classId,
+            className:
+              signup.character.characterClass.name ??
+              signup.character.characterClass.en_name ??
+              `职业 ${signup.character.classId}`,
+            specIdSnapshot: signup.preferredSpecId,
+            specName: signup.specs?.name ?? null,
+          },
+        });
+      }
+      await transaction.activityStrategySnapshot.updateMany({
+        where: { target: { activityId: id }, status: "EDITING" },
+        data: { status: "LOCKED", lockedBy: user.id, lockedAt, revision: { increment: 1 } },
+      });
+      return { rosterLockedAt: lockedAt.toISOString() };
     });
   }
 
   async unlockRoster(id: bigint, user: AuthUser) {
-    await this.requireManageable(id, user);
-    return this.prisma.activity.update({
-      where: { id },
-      data: { rosterLockedAt: null, version: { increment: 1 } },
+    const activity = await this.requireManageable(id, user);
+    if (activity.status >= 2)
+      throw new ConflictException({ code: "ACTIVITY_READ_ONLY", message: "已结束或已取消的活动不能解锁名单" });
+    if (!activity.rosterLockedAt) return { rosterLockedAt: null };
+    return this.prisma.$transaction(async (transaction) => {
+      const activityUnlocked = await transaction.activity.updateMany({
+        where: { id, version: activity.version, rosterLockedAt: { not: null }, status: { lt: 2 } },
+        data: { rosterLockedAt: null, version: { increment: 1 } },
+      });
+      if (!activityUnlocked.count) throw versionConflict();
+      await transaction.activityStrategySnapshotSlot.updateMany({
+        where: { snapshot: { target: { activityId: id } } },
+        data: {
+          userIdSnapshot: null,
+          userNameSnapshot: null,
+          characterIdSnapshot: null,
+          characterName: null,
+          realmName: null,
+          classIdSnapshot: null,
+          className: null,
+          specIdSnapshot: null,
+          specName: null,
+        },
+      });
+      await transaction.activityStrategySnapshot.updateMany({
+        where: { target: { activityId: id }, status: "LOCKED" },
+        data: { status: "EDITING", lockedBy: null, lockedAt: null, revision: { increment: 1 } },
+      });
+      return { rosterLockedAt: null };
     });
   }
 
@@ -836,4 +941,20 @@ function serializeSignup(
       priority: choice.priority,
     })),
   };
+}
+
+function buildTeamSeatSlots() {
+  return Array.from({ length: 8 }, (_, groupIndex) =>
+    Array.from({ length: 5 }, (_, positionIndex) => {
+      const groupNo = groupIndex + 1;
+      const positionNo = positionIndex + 1;
+      return {
+        slotKey: `__team_g${groupNo}_p${positionNo}`,
+        label: `第${groupNo}组 · ${positionNo}号位`,
+        groupNo,
+        positionNo,
+        orderIndex: groupIndex * 5 + positionIndex + 1,
+      };
+    }),
+  ).flat();
 }

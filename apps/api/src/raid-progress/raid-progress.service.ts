@@ -1,4 +1,12 @@
-import { BadGatewayException, ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadGatewayException,
+  ConflictException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import type { ActivityStrategyAssignmentsInput } from "@ttz/contracts";
 import type { Prisma } from "@ttz/database";
 import { WarcraftLogsClient, type WclFightMetricGraph, type WclFightMetricPoint } from "@ttz/warcraft-logs";
 import { assetUrl } from "../common/asset-url";
@@ -504,6 +512,109 @@ export class RaidProgressService {
     }));
   }
 
+  async saveSnapshotAssignments(
+    activityId: bigint,
+    snapshotId: bigint,
+    input: ActivityStrategyAssignmentsInput,
+    editor: { id: bigint; privilege: number },
+  ) {
+    const activity = await this.prisma.activity.findFirst({ where: { id: activityId, isDeleted: 0 } });
+    if (!activity) throw new NotFoundException({ code: "ACTIVITY_NOT_FOUND", message: "活动不存在" });
+    if (activity.creator !== editor.id && editor.privilege < 1)
+      throw new ForbiddenException({ code: "ACTIVITY_NOT_OWNED", message: "只能管理自己负责活动的战术快照" });
+    if (activity.status >= 2 || activity.rosterLockedAt)
+      throw new ConflictException({ code: "ACTIVITY_ROSTER_LOCKED", message: "活动名单已锁定或活动已结束" });
+
+    const snapshot = await this.prisma.activityStrategySnapshot.findFirst({
+      where: { id: snapshotId, target: { activityId } },
+      include: { slots: { select: { slotKey: true, groupNo: true, positionNo: true } } },
+    });
+    if (!snapshot) throw new NotFoundException({ code: "STRATEGY_SNAPSHOT_NOT_FOUND", message: "战术快照不存在" });
+    if (snapshot.status !== "EDITING")
+      throw new ConflictException({ code: "STRATEGY_SNAPSHOT_LOCKED", message: "战术快照已锁定" });
+
+    const grid = snapshot.slots.filter((slot) => slot.groupNo !== null && slot.positionNo !== null);
+    if (grid.length !== 40)
+      throw new ConflictException({
+        code: "STRATEGY_SNAPSHOT_GRID_INVALID",
+        message: "团队框架未初始化，请联系管理员",
+      });
+    const gridKeys = new Set(grid.map((slot) => `${slot.groupNo}:${slot.positionNo}`));
+    if (input.teamAssignments.some((entry) => !gridKeys.has(`${entry.groupNo}:${entry.positionNo}`)))
+      throw new ConflictException({ code: "STRATEGY_TEAM_POSITION_INVALID", message: "团队位置无效，请刷新后重试" });
+    const tacticalSlotKeys = new Set(
+      snapshot.slots.filter((slot) => slot.groupNo === null && slot.positionNo === null).map((slot) => slot.slotKey),
+    );
+    if (input.slotBindings.some((entry) => !tacticalSlotKeys.has(entry.slotKey)))
+      throw new ConflictException({ code: "STRATEGY_SLOT_INVALID", message: "战术槽位无效，请刷新后重试" });
+
+    const signupIds = [
+      ...new Set([
+        ...input.teamAssignments.map((entry) => BigInt(entry.signupId)),
+        ...input.slotBindings.map((entry) => BigInt(entry.signupId)),
+      ]),
+    ];
+    const validSignups = signupIds.length
+      ? await this.prisma.activitySignup.findMany({
+          where: { id: { in: signupIds }, activityId, status: { in: [1, 2] } },
+          select: { id: true },
+        })
+      : [];
+    if (validSignups.length !== signupIds.length)
+      throw new ConflictException({ code: "STRATEGY_SIGNUP_INVALID", message: "仅可分配已确认或替补的本场报名" });
+
+    return this.prisma.$transaction(async (tx) => {
+      const activityUpdated = await tx.activity.updateMany({
+        where: { id: activityId, version: activity.version, rosterLockedAt: null, status: { lt: 2 } },
+        data: { version: { increment: 1 } },
+      });
+      if (!activityUpdated.count)
+        throw new ConflictException({ code: "VERSION_CONFLICT", message: "活动名单已变化，请刷新后重试" });
+      const snapshotUpdated = await tx.activityStrategySnapshot.updateMany({
+        where: { id: snapshotId, revision: input.revision, status: "EDITING" },
+        data: { revision: { increment: 1 } },
+      });
+      if (!snapshotUpdated.count)
+        throw new ConflictException({ code: "VERSION_CONFLICT", message: "战术快照已被其他人修改，请刷新后重试" });
+      const assignedAt = new Date();
+      const clearBindings = { signupId: null, assignedBy: null, assignedAt: null };
+      await tx.activityStrategySnapshotSlot.updateMany({
+        where: { snapshotId, groupNo: { not: null } },
+        data: {
+          ...clearBindings,
+          userIdSnapshot: null,
+          userNameSnapshot: null,
+          characterIdSnapshot: null,
+          characterName: null,
+          realmName: null,
+          classIdSnapshot: null,
+          className: null,
+          specIdSnapshot: null,
+          specName: null,
+        },
+      });
+      await tx.activityStrategySnapshotSlot.updateMany({
+        where: { snapshotId, groupNo: null },
+        data: clearBindings,
+      });
+      for (const entry of input.teamAssignments) {
+        await tx.activityStrategySnapshotSlot.update({
+          where: {
+            snapshotId_groupNo_positionNo: { snapshotId, groupNo: entry.groupNo, positionNo: entry.positionNo },
+          },
+          data: { signupId: BigInt(entry.signupId), assignedBy: editor.id, assignedAt },
+        });
+      }
+      for (const entry of input.slotBindings) {
+        await tx.activityStrategySnapshotSlot.update({
+          where: { snapshotId_slotKey: { snapshotId, slotKey: entry.slotKey } },
+          data: { signupId: BigInt(entry.signupId), assignedBy: editor.id, assignedAt },
+        });
+      }
+      return { snapshotId: snapshotId.toString(), revision: input.revision + 1, updated: true };
+    });
+  }
+
   async listSnapshots(activityId: bigint, viewer: { id: bigint; privilege: number }) {
     const activity = await this.prisma.activity.findFirst({ where: { id: activityId, isDeleted: 0 } });
     if (!activity || (activity.status === 0 && activity.creator !== viewer.id && viewer.privilege < 1))
@@ -515,7 +626,10 @@ export class RaidProgressService {
         boss: { select: { name: true } },
         strategyVersion: { include: { strategy: { select: { name: true } } } },
         strategySnapshot: {
-          include: { blocks: { orderBy: { orderIndex: "asc" } }, slots: { orderBy: { orderIndex: "asc" } } },
+          include: {
+            blocks: { orderBy: { orderIndex: "asc" } },
+            slots: { orderBy: [{ groupNo: "asc" }, { positionNo: "asc" }, { orderIndex: "asc" }] },
+          },
         },
       },
     });
@@ -530,6 +644,7 @@ export class RaidProgressService {
         ? {
             id: target.strategySnapshot.id.toString(),
             status: target.strategySnapshot.status,
+            revision: target.strategySnapshot.revision,
             lockedAt: target.strategySnapshot.lockedAt?.toISOString() ?? null,
             blocks: target.strategySnapshot.blocks.map((block) => ({
               id: block.id.toString(),
@@ -542,10 +657,13 @@ export class RaidProgressService {
             slots: target.strategySnapshot.slots.map((slot) => ({
               slotKey: slot.slotKey,
               label: slot.label,
+              groupNo: slot.groupNo,
+              positionNo: slot.positionNo,
               signupId: slot.signupId?.toString() ?? null,
               userName: slot.userNameSnapshot,
               characterName: slot.characterName,
               realmName: slot.realmName,
+              classId: slot.classIdSnapshot,
               className: slot.className,
               specName: slot.specName,
             })),

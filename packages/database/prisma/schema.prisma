@@ -59,6 +59,7 @@ model User {
   publishedBossStrategyVersions                                           BossStrategyVersion[]         @relation("BossStrategyVersionPublisher")
   createdActivityStrategySnapshots                                        ActivityStrategySnapshot[]    @relation("ActivityStrategySnapshotCreator")
   lockedActivityStrategySnapshots                                         ActivityStrategySnapshot[]    @relation("ActivityStrategySnapshotLocker")
+  assignedActivityStrategySnapshotSlots                                  ActivityStrategySnapshotSlot[] @relation("ActivityStrategySlotAssigner")
   updatedWclGuildProgressSetting                                          WclGuildProgressSetting[]
 
   @@index([isApproved, status], map: "idx_users_approval")
@@ -570,6 +571,7 @@ model ActivityStrategySnapshot {
   targetId        BigInt                          @unique(map: "uk_activity_strategy_snapshot_target") @map("target_id") @db.UnsignedBigInt
   sourceVersionId BigInt?                         @map("source_version_id") @db.UnsignedBigInt
   status          String                          @default("EDITING") @db.VarChar(16)
+  revision        Int                             @default(1) @db.UnsignedInt
   createdBy       BigInt                          @map("created_by") @db.UnsignedBigInt
   lockedBy        BigInt?                         @map("locked_by") @db.UnsignedBigInt
   createdAt       DateTime                        @default(now()) @map("created_at") @db.DateTime(0)
@@ -615,12 +617,20 @@ model ActivityStrategySnapshotSlot {
   className           String?                  @map("class_name_snapshot") @db.VarChar(25)
   specIdSnapshot      Int?                     @map("spec_id_snapshot")
   specName            String?                  @map("spec_name_snapshot") @db.VarChar(25)
+  classIdSnapshot     Int?                     @map("class_id_snapshot")
+  groupNo             Int?                     @map("group_no") @db.UnsignedTinyInt
+  positionNo          Int?                     @map("position_no") @db.UnsignedTinyInt
+  assignedBy          BigInt?                  @map("assigned_by") @db.UnsignedBigInt
+  assignedAt          DateTime?                @map("assigned_at") @db.DateTime(0)
   orderIndex          Int                      @default(0) @map("order_index") @db.SmallInt
   snapshot            ActivityStrategySnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_activity_strategy_slot_snapshot")
   signup              ActivitySignup?          @relation(fields: [signupId], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_activity_strategy_slot_signup")
+  assigner            User?                    @relation("ActivityStrategySlotAssigner", fields: [assignedBy], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_activity_strategy_slot_assigner")
 
   @@unique([snapshotId, slotKey], map: "uk_activity_strategy_slot_key")
+  @@unique([snapshotId, groupNo, positionNo], map: "uk_activity_strategy_slot_group_position")
   @@index([signupId], map: "idx_activity_strategy_slot_signup")
+  @@index([assignedBy], map: "idx_activity_strategy_slot_assigned_by")
   @@map("activity_strategy_snapshot_slots")
 }
 

@@ -71,10 +71,17 @@ describe("raid activity strategy snapshots", () => {
         create: {
           sourceVersionId: 5n,
           blocks: { create: [expect.objectContaining({ sourceBlockId: 6n, markdown: "先躲技能" })] },
-          slots: { create: [expect.objectContaining({ slotKey: "main-tank", label: "主坦" })] },
+          slots: {
+            create: expect.arrayContaining([
+              expect.objectContaining({ slotKey: "main-tank", label: "主坦" }),
+              expect.objectContaining({ slotKey: "__team_g1_p1", groupNo: 1, positionNo: 1 }),
+              expect.objectContaining({ slotKey: "__team_g8_p5", groupNo: 8, positionNo: 5 }),
+            ]),
+          },
         },
       },
     });
+    expect(data.raidTargets.create[0].strategySnapshot.create.slots.create).toHaveLength(41);
   });
 });
 

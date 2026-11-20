@@ -1,5 +1,10 @@
 import { Body, Controller, Get, Inject, Param, Post, Put } from "@nestjs/common";
-import { bossStrategyCreateSchema, bossStrategyVersionSaveSchema, idSchema } from "@ttz/contracts";
+import {
+  activityStrategyAssignmentsSchema,
+  bossStrategyCreateSchema,
+  bossStrategyVersionSaveSchema,
+  idSchema,
+} from "@ttz/contracts";
 import { CurrentUser, MinPrivilege, Public } from "../auth/auth.decorators";
 import type { AuthUser } from "../auth/auth.types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
@@ -54,6 +59,18 @@ export class RaidProgressController {
   @Get("activities/:id/snapshots")
   snapshots(@Param("id", new ZodValidationPipe(idSchema)) id: string, @CurrentUser() user: AuthUser) {
     return this.service.listSnapshots(BigInt(id), user);
+  }
+
+  @Put("activities/:activityId/snapshots/:snapshotId/assignments")
+  saveSnapshotAssignments(
+    @Param("activityId", new ZodValidationPipe(idSchema)) activityId: string,
+    @Param("snapshotId", new ZodValidationPipe(idSchema)) snapshotId: string,
+    @Body(new ZodValidationPipe(activityStrategyAssignmentsSchema)) body: Parameters<
+      RaidProgressService["saveSnapshotAssignments"]
+    >[2],
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.saveSnapshotAssignments(BigInt(activityId), BigInt(snapshotId), body, user);
   }
 
   @Get("strategy-versions/:id")

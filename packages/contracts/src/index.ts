@@ -299,6 +299,29 @@ export const raidActivityDetailSchema = z.object({
       strategyName: z.string(),
       strategyVersionNo: z.number().int().nullable(),
       strategySnapshotId: idSchema.nullable(),
+      snapshot: z
+        .object({
+          id: idSchema,
+          status: z.enum(["EDITING", "LOCKED"]),
+          revision: z.number().int().min(1),
+          lockedAt: isoDateTimeSchema.nullable(),
+          slots: z.array(
+            z.object({
+              slotKey: z.string(),
+              label: z.string(),
+              groupNo: z.number().int().min(1).max(8).nullable(),
+              positionNo: z.number().int().min(1).max(5).nullable(),
+              signupId: idSchema.nullable(),
+              userName: z.string().nullable(),
+              characterName: z.string().nullable(),
+              realmName: z.string().nullable(),
+              classId: z.number().int().nullable(),
+              className: z.string().nullable(),
+              specName: z.string().nullable(),
+            }),
+          ),
+        })
+        .nullable(),
       blocks: z.array(
         z.object({
           type: z.string(),
@@ -806,7 +829,12 @@ export const bossStrategyVersionSaveSchema = z.object({
   slots: z
     .array(
       z.object({
-        slotKey: z.string().trim().min(1).max(64),
+        slotKey: z
+          .string()
+          .trim()
+          .min(1)
+          .max(64)
+          .refine((key) => !key.startsWith("__team_"), "槽位键不能使用团队席位保留前缀"),
         label: z.string().trim().min(1).max(128),
         roleConstraint: z.number().int().min(1).max(4).nullable().optional(),
         isRequired: z.boolean(),
@@ -844,6 +872,78 @@ export const raidActivityInputSchema = z
       context.addIssue({ code: "custom", path: ["targets"], message: "活动目标 Boss 不能重复" });
     }
   });
+export const activityStrategySnapshotSchema = z.object({
+  targetId: idSchema,
+  bossId: idSchema,
+  bossName: z.string(),
+  orderIndex: z.number().int(),
+  strategyName: z.string(),
+  sourceVersionId: idSchema.nullable(),
+  snapshot: z
+    .object({
+      id: idSchema,
+      status: z.enum(["EDITING", "LOCKED"]),
+      revision: z.number().int().min(1),
+      lockedAt: isoDateTimeSchema.nullable(),
+      blocks: z.array(
+        z.object({
+          id: idSchema,
+          type: z.string(),
+          title: z.string(),
+          orderIndex: z.number().int(),
+          config: z.record(z.string(), z.unknown()).nullable(),
+          markdown: z.string().nullable(),
+        }),
+      ),
+      slots: z.array(
+        z.object({
+          slotKey: z.string(),
+          label: z.string(),
+          groupNo: z.number().int().min(1).max(8).nullable(),
+          positionNo: z.number().int().min(1).max(5).nullable(),
+          signupId: idSchema.nullable(),
+          userName: z.string().nullable(),
+          characterName: z.string().nullable(),
+          realmName: z.string().nullable(),
+          classId: z.number().int().nullable(),
+          className: z.string().nullable(),
+          specName: z.string().nullable(),
+        }),
+      ),
+    })
+    .nullable(),
+});
+export const activityStrategySnapshotsSchema = z.array(activityStrategySnapshotSchema);
+export const activityStrategyAssignmentsSchema = z
+  .object({
+    revision: z.number().int().min(1),
+    teamAssignments: z
+      .array(
+        z.object({
+          groupNo: z.number().int().min(1).max(8),
+          positionNo: z.number().int().min(1).max(5),
+          signupId: idSchema,
+        }),
+      )
+      .max(40),
+    slotBindings: z.array(z.object({ slotKey: z.string().trim().min(1).max(64), signupId: idSchema })).max(200),
+  })
+  .superRefine((value, context) => {
+    const positions = value.teamAssignments.map(({ groupNo, positionNo }) => `${groupNo}:${positionNo}`);
+    if (new Set(positions).size !== positions.length) {
+      context.addIssue({ code: "custom", path: ["teamAssignments"], message: "团队位置不能重复" });
+    }
+    const teamSignupIds = value.teamAssignments.map(({ signupId }) => signupId);
+    if (new Set(teamSignupIds).size !== teamSignupIds.length) {
+      context.addIssue({ code: "custom", path: ["teamAssignments"], message: "同一报名不能重复占据多个团队位置" });
+    }
+    const slotKeys = value.slotBindings.map(({ slotKey }) => slotKey);
+    if (new Set(slotKeys).size !== slotKeys.length) {
+      context.addIssue({ code: "custom", path: ["slotBindings"], message: "战术槽位不能重复" });
+    }
+  });
+export type ActivityStrategyAssignmentsInput = z.infer<typeof activityStrategyAssignmentsSchema>;
+
 export const publicProgressSchema = z.object({
   source: z.literal("WCL"),
   region: z.literal("CN"),
