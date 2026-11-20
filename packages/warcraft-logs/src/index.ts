@@ -59,6 +59,28 @@ export interface WclClassDefinition {
   specs: Array<{ id: number; name: string; slug: string }>;
 }
 
+export interface WclRaidZoneInfo {
+  id: number;
+  name: string;
+  encounters: Array<{ id: number; name: string }>;
+}
+
+export interface WclGuildReportFight {
+  id: number;
+  encounterId: number;
+  name: string;
+  difficulty: number;
+  kill: boolean;
+  bossPercent: number | null;
+  startTime: number;
+  endTime: number;
+}
+
+export interface WclGuildReportsPage {
+  reports: Array<{ code: string; startTime: number; fights: WclGuildReportFight[] }>;
+  hasMorePages: boolean;
+}
+
 export interface WclCurrentUser {
   id: number;
   name: string;
@@ -173,6 +195,82 @@ export class WarcraftLogsClient {
     const query = "query TTZClasses { gameData { classes { id name slug specs { id name slug } } } }";
     const result = await this.graphqlClient<{ gameData: { classes: WclClassDefinition[] } }>(region, query, {});
     return result.gameData.classes;
+  }
+
+  async getRaidZoneInfo(region: WclRegion = "cn"): Promise<WclRaidZoneInfo[]> {
+    const result = await this.graphqlClient<{ worldData: { zones: WclRaidZoneInfo[] } }>(
+      region,
+      "query TTZRaidZones { worldData { zones { id name encounters { id name } } } }",
+      {},
+    );
+    return result.worldData.zones ?? [];
+  }
+
+  async getGuildReportPage(input: {
+    guildId: number;
+    zoneId: number;
+    page: number;
+    region?: WclRegion;
+    startTime?: number;
+  }): Promise<WclGuildReportsPage> {
+    const fields = "id encounterID name difficulty kill bossPercentage startTime endTime";
+    const query = [
+      "query TTZGuildReports($guildId: Int!, $zoneId: Int!, $page: Int!, $startTime: Float) {",
+      " reportData { reports(guildID: $guildId, zoneID: $zoneId, startTime: $startTime, limit: 10, page: $page) {",
+      " data { code startTime heroicFights: fights(difficulty: 4) { " +
+        fields +
+        " } mythicFights: fights(difficulty: 5) { " +
+        fields +
+        " } }",
+      " has_more_pages } }",
+      "}",
+    ].join(" ");
+    const data = await this.graphqlClient<{
+      reportData: {
+        reports: {
+          data: Array<{
+            code: string;
+            startTime: number;
+            heroicFights: Array<
+              Omit<WclGuildReportFight, "encounterId" | "bossPercent"> & {
+                encounterID: number;
+                bossPercentage: number | null;
+              }
+            >;
+            mythicFights: Array<
+              Omit<WclGuildReportFight, "encounterId" | "bossPercent"> & {
+                encounterID: number;
+                bossPercentage: number | null;
+              }
+            >;
+          }>;
+          has_more_pages: boolean;
+        };
+      };
+    }>(input.region ?? "cn", query, {
+      guildId: input.guildId,
+      zoneId: input.zoneId,
+      page: input.page,
+      ...(input.startTime !== undefined ? { startTime: input.startTime } : {}),
+    });
+    const result = data.reportData.reports;
+    return {
+      hasMorePages: result.has_more_pages ?? false,
+      reports: (result.data ?? []).map((report) => ({
+        code: report.code,
+        startTime: report.startTime,
+        fights: [...(report.heroicFights ?? []), ...(report.mythicFights ?? [])].map((fight) => ({
+          id: fight.id,
+          encounterId: fight.encounterID,
+          name: fight.name,
+          difficulty: fight.difficulty,
+          kill: fight.kill,
+          bossPercent: fight.bossPercentage,
+          startTime: fight.startTime,
+          endTime: fight.endTime,
+        })),
+      })),
+    };
   }
 
   async getReport(code: string): Promise<WclReportData> {

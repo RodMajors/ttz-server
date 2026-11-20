@@ -211,6 +211,7 @@ export const activityDetailSchema = z.object({
   canChangeMySignup: z.boolean(),
   mySignup: activitySignupSchema.nullable(),
   signups: z.array(activitySignupSchema),
+  raid: z.lazy(() => raidActivityDetailSchema).nullable(),
 });
 export type ActivityDetail = z.infer<typeof activityDetailSchema>;
 
@@ -229,9 +230,39 @@ const activityFieldsSchema = z.object({
   meleeSlots: z.number().int().min(0).max(100).nullable().optional(),
   rangedSlots: z.number().int().min(0).max(100).nullable().optional(),
   attendanceEnabled: z.boolean().optional(),
+  raid: z
+    .object({
+      progressPlanId: idSchema,
+      mode: z.enum(["PROGRESSION", "FARM"]),
+      targets: z
+        .array(
+          z.object({
+            bossId: idSchema,
+            orderIndex: z.number().int().min(0).max(100),
+            targetCount: z.number().int().min(1).max(100).nullable().optional(),
+            strategyVersionId: idSchema.nullable(),
+          }),
+        )
+        .min(1)
+        .max(20),
+    })
+    .optional(),
 });
 
 export const createActivitySchema = activityFieldsSchema.superRefine((value, context) => {
+  const isRaid = value.type === "raid_progress" || value.type === "raid_farm";
+  if (isRaid && !value.raid) {
+    context.addIssue({ code: "custom", path: ["raid"], message: "团本活动必须选择进度计划和目标 Boss" });
+  }
+  if (!isRaid && value.raid) {
+    context.addIssue({ code: "custom", path: ["raid"], message: "只有团本活动可以配置 Boss 目标" });
+  }
+  if (value.raid) {
+    const bossIds = value.raid.targets.map((target) => target.bossId);
+    if (new Set(bossIds).size !== bossIds.length) {
+      context.addIssue({ code: "custom", path: ["raid", "targets"], message: "同一活动不能重复选择 Boss" });
+    }
+  }
   const beginAt = new Date(value.beginAt);
   if (new Date(value.signupDeadline) >= beginAt) {
     context.addIssue({ code: "custom", path: ["signupDeadline"], message: "报名截止时间必须早于活动开始时间" });
@@ -247,10 +278,39 @@ export const createActivitySchema = activityFieldsSchema.superRefine((value, con
     context.addIssue({ code: "custom", path: ["maxPlayers"], message: "职责需求总数不能超过人数上限" });
   }
 });
-export type CreateActivityInput = z.infer<typeof createActivitySchema>;
+export const createRaidActivitySchema = createActivitySchema;
+export type CreateActivityInput = z.infer<typeof createRaidActivitySchema>;
 
 export const updateActivitySchema = activityFieldsSchema.partial().extend({ version: z.number().int().positive() });
 export type UpdateActivityInput = z.infer<typeof updateActivitySchema>;
+
+export const raidActivityDetailSchema = z.object({
+  progressPlanId: idSchema,
+  raidName: z.string(),
+  difficulty: z.enum(["HEROIC", "MYTHIC"]),
+  mode: z.enum(["PROGRESSION", "FARM"]),
+  targets: z.array(
+    z.object({
+      id: idSchema,
+      bossId: idSchema,
+      bossName: z.string(),
+      wclId: z.number().int(),
+      orderIndex: z.number().int(),
+      strategyName: z.string(),
+      strategyVersionNo: z.number().int().nullable(),
+      strategySnapshotId: idSchema.nullable(),
+      blocks: z.array(
+        z.object({
+          type: z.string(),
+          title: z.string(),
+          orderIndex: z.number().int(),
+          config: z.record(z.string(), z.unknown()).nullable(),
+          markdown: z.string().nullable(),
+        }),
+      ),
+    }),
+  ),
+});
 
 export const createCharacterSchema = z.object({
   name: z.string().trim().min(2).max(64),
@@ -595,6 +655,115 @@ export const contactSettingSchema = z
   .passthrough();
 export const toolLinkSchema = z.object({ name: z.string(), url: z.string().url(), description: z.string().optional() });
 export const toolLinksSettingSchema = z.object({ links: z.array(toolLinkSchema).default([]) }).passthrough();
+export const wclGuildProgressSettingSchema = z.object({
+  guildId: z.number().int().positive(),
+  guildName: z.string().trim().min(1).max(128),
+  serverId: z.number().int().positive(),
+  serverName: z.string().trim().min(1).max(64),
+  serverSlug: z.string().trim().min(1).max(64),
+  serverRegion: z.string().trim().min(1).max(16),
+  zoneId: z.number().int().positive(),
+  season: z.string().trim().min(1).max(32),
+});
+export type WclGuildProgressSetting = z.infer<typeof wclGuildProgressSettingSchema>;
+
+export const raidDifficultySchema = z.enum(["HEROIC", "MYTHIC"]);
+export const raidPlanCreateSchema = z.object({
+  raidId: idSchema,
+  difficulty: raidDifficultySchema,
+  season: z.string().trim().min(1).max(32),
+  name: z.string().trim().min(2).max(128),
+});
+export const raidBossManualOverrideSchema = z.object({
+  status: z.enum(["NOT_STARTED", "PROGRESSING", "DEFEATED"]).nullable(),
+  bestPercent: z.number().min(0).max(100).nullable(),
+  firstKillAt: isoDateTimeSchema.nullable(),
+  lastKillAt: isoDateTimeSchema.nullable(),
+  reason: z.string().trim().max(255).nullable(),
+});
+export const bossStrategyCreateSchema = z.object({
+  progressPlanId: idSchema,
+  bossId: idSchema,
+  name: z.string().trim().min(2).max(128),
+  description: z.string().trim().max(500).nullable().optional(),
+});
+export const raidGuildSettingsSchema = wclGuildProgressSettingSchema.extend({
+  source: z.enum(["DATABASE", "ENVIRONMENT"]).optional(),
+  updatedAt: isoDateTimeSchema.nullable().optional(),
+});
+export const createStrategyInputSchema = bossStrategyCreateSchema;
+export const strategyVersionDtoSchema = z.object({
+  id: idSchema,
+  strategyId: idSchema,
+  versionNo: z.number().int(),
+  status: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]),
+  changeSummary: z.string().nullable(),
+  createdAt: isoDateTimeSchema,
+  publishedAt: isoDateTimeSchema.nullable(),
+  blocks: z.array(
+    z.object({
+      id: idSchema,
+      type: z.string(),
+      title: z.string(),
+      orderIndex: z.number().int(),
+      config: z.record(z.string(), z.unknown()).nullable(),
+      markdown: z.string().nullable(),
+    }),
+  ),
+  slots: z.array(
+    z.object({
+      id: idSchema,
+      slotKey: z.string(),
+      label: z.string(),
+      roleConstraint: z.number().int().nullable(),
+      isRequired: z.boolean(),
+      orderIndex: z.number().int(),
+    }),
+  ),
+});
+export const bossStrategyVersionSaveSchema = z.object({
+  changeSummary: z.string().trim().max(500).nullable().optional(),
+  slots: z
+    .array(
+      z.object({
+        slotKey: z.string().trim().min(1).max(64),
+        label: z.string().trim().min(1).max(128),
+        roleConstraint: z.number().int().min(1).max(4).nullable().optional(),
+        isRequired: z.boolean(),
+        orderIndex: z.number().int().min(0).max(1000),
+      }),
+    )
+    .max(200)
+    .refine((slots) => new Set(slots.map((slot) => slot.slotKey)).size === slots.length, "槽位键不能重复"),
+  blocks: z
+    .array(
+      z.object({
+        type: z.enum(["POSITIONING", "RAID_GROUPS", "SEQUENCE", "TIMELINE", "NOTES"]),
+        title: z.string().trim().min(1).max(128),
+        orderIndex: z.number().int().min(0).max(1000),
+        config: z.record(z.string(), z.unknown()).nullable().optional(),
+        markdown: z.string().max(200_000).nullable().optional(),
+      }),
+    )
+    .max(50),
+});
+export const raidTargetCreateSchema = z.object({
+  bossId: idSchema,
+  orderIndex: z.number().int().min(0).max(100),
+  targetCount: z.number().int().min(1).max(100).nullable().optional(),
+  strategyVersionId: idSchema.nullable(),
+});
+export const raidActivityInputSchema = z
+  .object({
+    progressPlanId: idSchema,
+    mode: z.enum(["PROGRESSION", "FARM"]),
+    targets: z.array(raidTargetCreateSchema).min(1).max(20),
+  })
+  .superRefine((value, context) => {
+    if (new Set(value.targets.map((target) => target.bossId)).size !== value.targets.length) {
+      context.addIssue({ code: "custom", path: ["targets"], message: "活动目标 Boss 不能重复" });
+    }
+  });
 export const publicProgressSchema = z.object({
   source: z.literal("WCL"),
   region: z.literal("CN"),

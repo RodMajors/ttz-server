@@ -1,4 +1,4 @@
-import { rosterUpdateSchema, signupSchema } from "@ttz/contracts";
+import { createActivitySchema, rosterUpdateSchema, signupSchema } from "@ttz/contracts";
 import { describe, expect, it } from "vitest";
 
 describe("activity request rules", () => {
@@ -21,6 +21,27 @@ describe("activity request rules", () => {
       orderIndex: 0,
     } as const;
     const result = rosterUpdateSchema.safeParse({ version: 1, entries: [entry, entry] });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects duplicate Boss targets in a raid activity", () => {
+    const result = createActivitySchema.safeParse({
+      name: "史诗团本开荒",
+      type: "raid_progress",
+      beginAt: "2026-12-01T12:00:00.000Z",
+      signupDeadline: "2026-12-01T10:00:00.000Z",
+      durationMinutes: 180,
+      maxPlayers: 20,
+      raid: {
+        progressPlanId: "1",
+        mode: "PROGRESSION",
+        targets: [
+          { bossId: "2", orderIndex: 0, strategyVersionId: null },
+          { bossId: "2", orderIndex: 1, strategyVersionId: null },
+        ],
+      },
+    });
+
     expect(result.success).toBe(false);
   });
 });

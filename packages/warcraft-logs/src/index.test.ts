@@ -157,6 +157,195 @@ describe("WarcraftLogsClient", () => {
       { id: 10, name: "术士", slug: "Warlock", specs: [{ id: 1, name: "痛苦", slug: "Affliction" }] },
     ]);
   });
+
+  it("reads WCL raid zones and normalizes paginated guild fight data", async () => {
+    const request = vi.fn<typeof fetch>().mockImplementation(async (url, init) => {
+      if (url === "https://www.warcraftlogs.com/oauth/token") {
+        return jsonResponse({ access_token: "token", expires_in: 3600 });
+      }
+      const body = JSON.parse(String(init?.body)) as { query: string };
+      if (body.query.includes("TTZRaidZones")) {
+        return jsonResponse({
+          data: { worldData: { zones: [{ id: 53, name: "烈毒之渊", encounters: [{ id: 3420, name: "Boss" }] }] } },
+        });
+      }
+      return jsonResponse({
+        data: {
+          reportData: {
+            reports: {
+              has_more_pages: true,
+              data: [
+                {
+                  code: "R1",
+                  startTime: 100,
+                  heroicFights: [
+                    {
+                      id: 1,
+                      encounterID: 3420,
+                      name: "Boss",
+                      difficulty: 4,
+                      kill: true,
+                      bossPercentage: null,
+                      startTime: 0,
+                      endTime: 50,
+                    },
+                  ],
+                  mythicFights: [
+                    {
+                      id: 2,
+                      encounterID: 3420,
+                      name: "Boss",
+                      difficulty: 5,
+                      kill: false,
+                      bossPercentage: 22.5,
+                      startTime: 60,
+                      endTime: 90,
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      });
+    });
+    const client = new WarcraftLogsClient("client-id", "client-secret", request);
+
+    await expect(client.getRaidZoneInfo("cn")).resolves.toEqual([
+      { id: 53, name: "烈毒之渊", encounters: [{ id: 3420, name: "Boss" }] },
+    ]);
+    await expect(client.getGuildReportPage({ guildId: 820881, zoneId: 53, page: 2 })).resolves.toEqual({
+      hasMorePages: true,
+      reports: [
+        {
+          code: "R1",
+          startTime: 100,
+          fights: [
+            {
+              id: 1,
+              encounterId: 3420,
+              name: "Boss",
+              difficulty: 4,
+              kill: true,
+              bossPercent: null,
+              startTime: 0,
+              endTime: 50,
+            },
+            {
+              id: 2,
+              encounterId: 3420,
+              name: "Boss",
+              difficulty: 5,
+              kill: false,
+              bossPercent: 22.5,
+              startTime: 60,
+              endTime: 90,
+            },
+          ],
+        },
+      ],
+    });
+    expect(request.mock.calls.at(-1)?.[1]).toMatchObject({
+      body: expect.stringContaining("mythicFights: fights(difficulty: 5)"),
+    });
+  });
+
+  it("loads raid zone metadata and paginated guild fight records", async () => {
+    const request = vi.fn<typeof fetch>().mockImplementation(async (url, init) => {
+      if (url === "https://www.warcraftlogs.com/oauth/token") {
+        return jsonResponse({ access_token: "token", expires_in: 3600 });
+      }
+      const body = JSON.parse(String(init?.body)) as { query: string };
+      if (body.query.includes("TTZRaidZones")) {
+        return jsonResponse({
+          data: { worldData: { zones: [{ id: 53, name: "烈毒之渊", encounters: [{ id: 3420, name: "Boss" }] }] } },
+        });
+      }
+      return jsonResponse({
+        data: {
+          reportData: {
+            reports: {
+              has_more_pages: false,
+              data: [
+                {
+                  code: "R1",
+                  startTime: 100,
+                  heroicFights: [
+                    {
+                      id: 1,
+                      encounterID: 3420,
+                      name: "Boss",
+                      difficulty: 4,
+                      kill: true,
+                      bossPercentage: null,
+                      startTime: 0,
+                      endTime: 50,
+                    },
+                  ],
+                  mythicFights: [
+                    {
+                      id: 2,
+                      encounterID: 3420,
+                      name: "Boss",
+                      difficulty: 5,
+                      kill: false,
+                      bossPercentage: 22.5,
+                      startTime: 60,
+                      endTime: 90,
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      });
+    });
+    const client = new WarcraftLogsClient("client-id", "client-secret", request);
+
+    await expect(client.getRaidZoneInfo("cn")).resolves.toEqual([
+      { id: 53, name: "烈毒之渊", encounters: [{ id: 3420, name: "Boss" }] },
+    ]);
+    await expect(
+      client.getGuildReportPage({ guildId: 820881, zoneId: 53, page: 1, startTime: 1_000 }),
+    ).resolves.toEqual({
+      hasMorePages: false,
+      reports: [
+        {
+          code: "R1",
+          startTime: 100,
+          fights: [
+            {
+              id: 1,
+              encounterId: 3420,
+              name: "Boss",
+              difficulty: 4,
+              kill: true,
+              bossPercent: null,
+              startTime: 0,
+              endTime: 50,
+            },
+            {
+              id: 2,
+              encounterId: 3420,
+              name: "Boss",
+              difficulty: 5,
+              kill: false,
+              bossPercent: 22.5,
+              startTime: 60,
+              endTime: 90,
+            },
+          ],
+        },
+      ],
+    });
+    const queryBody = JSON.parse(String(request.mock.calls.at(-1)?.[1]?.body)) as {
+      query: string;
+      variables: Record<string, unknown>;
+    };
+    expect(queryBody.query).toContain("heroicFights: fights(difficulty: 4)");
+    expect(queryBody.variables).toMatchObject({ guildId: 820881, zoneId: 53, page: 1, startTime: 1_000 });
+  });
 });
 
 function jsonResponse(payload: unknown) {

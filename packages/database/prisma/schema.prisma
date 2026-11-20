@@ -9,48 +9,57 @@ datasource db {
 }
 
 model User {
-  id                                                                      BigInt                    @id @default(autoincrement()) @db.UnsignedBigInt
-  name                                                                    String?                   @db.VarChar(255)
-  wxNickname                                                              String?                   @map("wx_nickname") @db.VarChar(255)
-  guildNickname                                                           String?                   @map("guild_nickname") @db.VarChar(255)
-  openid                                                                  String                    @unique(map: "uk_openid") @db.VarChar(128)
-  unionid                                                                 String?                   @db.VarChar(128)
-  avatar                                                                  String?                   @db.VarChar(255)
-  privilege                                                               Int                       @default(0) @db.TinyInt
-  isApproved                                                              Int                       @default(0) @map("is_approved") @db.TinyInt
-  reviewedBy                                                              BigInt?                   @map("reviewed_by") @db.UnsignedBigInt
-  reviewedAt                                                              DateTime?                 @map("reviewed_at") @db.DateTime(0)
-  rejectReason                                                            String?                   @map("reject_reason") @db.VarChar(255)
-  remark                                                                  String?                   @db.VarChar(255)
-  status                                                                  Int                       @default(1) @db.TinyInt
-  last_login_at                                                           DateTime?                 @db.DateTime(0)
-  createdAt                                                               DateTime                  @default(now()) @map("created_at") @db.DateTime(0)
-  updatedAt                                                               DateTime                  @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
+  id                                                                      BigInt                        @id @default(autoincrement()) @db.UnsignedBigInt
+  name                                                                    String?                       @db.VarChar(255)
+  wxNickname                                                              String?                       @map("wx_nickname") @db.VarChar(255)
+  guildNickname                                                           String?                       @map("guild_nickname") @db.VarChar(255)
+  openid                                                                  String                        @unique(map: "uk_openid") @db.VarChar(128)
+  unionid                                                                 String?                       @db.VarChar(128)
+  avatar                                                                  String?                       @db.VarChar(255)
+  privilege                                                               Int                           @default(0) @db.TinyInt
+  isApproved                                                              Int                           @default(0) @map("is_approved") @db.TinyInt
+  reviewedBy                                                              BigInt?                       @map("reviewed_by") @db.UnsignedBigInt
+  reviewedAt                                                              DateTime?                     @map("reviewed_at") @db.DateTime(0)
+  rejectReason                                                            String?                       @map("reject_reason") @db.VarChar(255)
+  remark                                                                  String?                       @db.VarChar(255)
+  status                                                                  Int                           @default(1) @db.TinyInt
+  last_login_at                                                           DateTime?                     @db.DateTime(0)
+  createdAt                                                               DateTime                      @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt                                                               DateTime                      @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
   activities                                                              Activity[]
-  activity_signups_activity_signups_handled_byTousers                     ActivitySignup[]          @relation("activity_signups_handled_byTousers")
+  activity_signups_activity_signups_handled_byTousers                     ActivitySignup[]              @relation("activity_signups_handled_byTousers")
   signups                                                                 ActivitySignup[]
-  announcementsCreated                                                    Announcement[]            @relation("AnnouncementCreatedBy")
-  announcementsUpdated                                                    Announcement[]            @relation("AnnouncementUpdatedBy")
-  attendance_records_attendance_records_recorded_byTousers                AttendanceRecord[]        @relation("attendance_records_recorded_byTousers")
+  announcementsCreated                                                    Announcement[]                @relation("AnnouncementCreatedBy")
+  announcementsUpdated                                                    Announcement[]                @relation("AnnouncementUpdatedBy")
+  attendance_records_attendance_records_recorded_byTousers                AttendanceRecord[]            @relation("attendance_records_recorded_byTousers")
   attendanceRecords                                                       AttendanceRecord[]
   authSessions                                                            AuthSession[]
   characters                                                              Character[]
-  guild_group_members_guild_group_members_added_byTousers                 GuildGroupMember[]        @relation("guild_group_members_added_byTousers")
+  guild_group_members_guild_group_members_added_byTousers                 GuildGroupMember[]            @relation("guild_group_members_added_byTousers")
   groupMemberships                                                        GuildGroupMember[]
   guild_groups                                                            GuildGroup[]
   loginSessions                                                           LoginSession[]
   notification_deliveries                                                 notification_deliveries[]
   notificationPreference                                                  NotificationPreference?
   site_settings                                                           SiteSetting[]
-  users                                                                   User?                     @relation("usersTousers", fields: [reviewedBy], references: [id], onUpdate: Restrict, map: "fk_users_reviewed_by")
-  other_users                                                             User[]                    @relation("usersTousers")
-  wcl_attendance_suggestions_wcl_attendance_suggestions_applied_byTousers WclAttendanceSuggestion[] @relation("wcl_attendance_suggestions_applied_byTousers")
+  users                                                                   User?                         @relation("usersTousers", fields: [reviewedBy], references: [id], onUpdate: Restrict, map: "fk_users_reviewed_by")
+  other_users                                                             User[]                        @relation("usersTousers")
+  wcl_attendance_suggestions_wcl_attendance_suggestions_applied_byTousers WclAttendanceSuggestion[]     @relation("wcl_attendance_suggestions_applied_byTousers")
   wclAttendanceSuggestions                                                WclAttendanceSuggestion[]
   wcl_report_actors                                                       WclReportActor[]
   wcl_reports                                                             WclReport[]
   wclUserLink                                                             WclUserLink?
   wclOAuthSessions                                                        WclOAuthSession[]
-  verifiedCharacters                                                      Character[]                @relation("CharacterVerifiedBy")
+  verifiedCharacters                                                      Character[]                   @relation("CharacterVerifiedBy")
+  createdRaidProgressPlans                                                RaidProgressPlan[]
+  manuallyUpdatedRaidBossProgress                                         RaidBossProgress[]            @relation("RaidBossProgressManualUpdater")
+  raidProgressOverrides                                                   RaidBossProgressOverrideLog[]
+  createdBossStrategies                                                   BossStrategy[]
+  createdBossStrategyVersions                                             BossStrategyVersion[]         @relation("BossStrategyVersionCreator")
+  publishedBossStrategyVersions                                           BossStrategyVersion[]         @relation("BossStrategyVersionPublisher")
+  createdActivityStrategySnapshots                                        ActivityStrategySnapshot[]    @relation("ActivityStrategySnapshotCreator")
+  lockedActivityStrategySnapshots                                         ActivityStrategySnapshot[]    @relation("ActivityStrategySnapshotLocker")
+  updatedWclGuildProgressSetting                                          WclGuildProgressSetting[]
 
   @@index([isApproved, status], map: "idx_users_approval")
   @@index([reviewedBy], map: "idx_users_reviewed_by")
@@ -127,9 +136,9 @@ model Character {
   wclId                    BigInt                    @map("wcl_id") @db.UnsignedBigInt
   wclCanonicalId           BigInt                    @map("wcl_canonical_id") @db.UnsignedBigInt
   wclVerificationStatus    Int                       @default(0) @map("wcl_verification_status") @db.TinyInt
-  wclVerifiedAt             DateTime?                 @map("wcl_verified_at") @db.DateTime(0)
-  wclEvidence               String?                   @map("wcl_evidence") @db.VarChar(16)
-  wclVerifiedBy             BigInt?                   @map("wcl_verified_by") @db.UnsignedBigInt
+  wclVerifiedAt            DateTime?                 @map("wcl_verified_at") @db.DateTime(0)
+  wclEvidence              String?                   @map("wcl_evidence") @db.VarChar(16)
+  wclVerifiedBy            BigInt?                   @map("wcl_verified_by") @db.UnsignedBigInt
   wclVerificationNote      String?                   @map("wcl_verification_note") @db.VarChar(255)
   itemLevel                Int?                      @map("item_level")
   itemLevelUpdatedAt       DateTime?                 @map("item_level_updated_at") @db.DateTime(0)
@@ -157,16 +166,16 @@ model Character {
 }
 
 model WclUserLink {
-  id             BigInt   @id @default(autoincrement()) @db.UnsignedBigInt
-  userId         BigInt   @unique(map: "uk_wcl_user_link_user") @map("user_id") @db.UnsignedBigInt
-  wclUserId      Int      @map("wcl_user_id")
-  wclUsername    String   @map("wcl_username") @db.VarChar(64)
-  wclRegion      String   @default("cn") @map("wcl_region") @db.VarChar(16)
-  linkedAt       DateTime @map("linked_at") @db.DateTime(0)
+  id             BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  userId         BigInt    @unique(map: "uk_wcl_user_link_user") @map("user_id") @db.UnsignedBigInt
+  wclUserId      Int       @map("wcl_user_id")
+  wclUsername    String    @map("wcl_username") @db.VarChar(64)
+  wclRegion      String    @default("cn") @map("wcl_region") @db.VarChar(16)
+  linkedAt       DateTime  @map("linked_at") @db.DateTime(0)
   lastVerifiedAt DateTime? @map("last_verified_at") @db.DateTime(0)
-  createdAt      DateTime @default(now()) @map("created_at") @db.DateTime(0)
-  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_wcl_user_link_user")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_wcl_user_link_user")
 
   @@unique([wclRegion, wclUserId], map: "uk_wcl_user_link_region_user")
   @@map("wcl_user_links")
@@ -266,6 +275,7 @@ model Activity {
   signups                  ActivitySignup[]
   attendanceRecords        AttendanceRecord[]
   wclReports               WclReport[]
+  raidTargets              ActivityRaidTarget[]
 
   @@index([isDeleted, status, beginAt], map: "idx_activities_list")
   @@index([creator, beginAt], map: "idx_activities_creator_time")
@@ -275,32 +285,33 @@ model Activity {
 }
 
 model ActivitySignup {
-  id                                       BigInt                 @id @default(autoincrement()) @db.UnsignedBigInt
-  activityId                               BigInt                 @map("activity_id") @db.UnsignedBigInt
-  userId                                   BigInt                 @map("user_id") @db.UnsignedBigInt
-  characterId                              BigInt                 @map("character_id") @db.UnsignedBigInt
-  preferredRole                            Int?                   @map("preferred_role") @db.TinyInt
-  preferredSpecId                          Int?                   @map("preferred_spec_id")
-  groupNo                                  Int?                   @map("group_no") @db.UnsignedTinyInt
-  orderIndex                               Int                    @default(0) @map("order_index") @db.SmallInt
-  status                                   Int                    @default(0) @db.TinyInt
-  note                                     String?                @db.VarChar(255)
-  officerNote                              String?                @map("officer_note") @db.VarChar(255)
-  handledBy                                BigInt?                @map("handled_by") @db.UnsignedBigInt
-  handledAt                                DateTime?              @map("handled_at") @db.DateTime(0)
-  decisionReason                           String?                @map("decision_reason") @db.VarChar(255)
-  signedUpAt                               DateTime               @default(now()) @map("signed_up_at") @db.DateTime(0)
-  confirmedAt                              DateTime?              @map("confirmed_at") @db.DateTime(0)
-  cancelledAt                              DateTime?              @map("cancelled_at") @db.DateTime(0)
-  created_at                               DateTime               @default(now()) @db.DateTime(0)
-  updated_at                               DateTime               @default(now()) @db.DateTime(0)
+  id                                       BigInt                         @id @default(autoincrement()) @db.UnsignedBigInt
+  activityId                               BigInt                         @map("activity_id") @db.UnsignedBigInt
+  userId                                   BigInt                         @map("user_id") @db.UnsignedBigInt
+  characterId                              BigInt                         @map("character_id") @db.UnsignedBigInt
+  preferredRole                            Int?                           @map("preferred_role") @db.TinyInt
+  preferredSpecId                          Int?                           @map("preferred_spec_id")
+  groupNo                                  Int?                           @map("group_no") @db.UnsignedTinyInt
+  orderIndex                               Int                            @default(0) @map("order_index") @db.SmallInt
+  status                                   Int                            @default(0) @db.TinyInt
+  note                                     String?                        @db.VarChar(255)
+  officerNote                              String?                        @map("officer_note") @db.VarChar(255)
+  handledBy                                BigInt?                        @map("handled_by") @db.UnsignedBigInt
+  handledAt                                DateTime?                      @map("handled_at") @db.DateTime(0)
+  decisionReason                           String?                        @map("decision_reason") @db.VarChar(255)
+  signedUpAt                               DateTime                       @default(now()) @map("signed_up_at") @db.DateTime(0)
+  confirmedAt                              DateTime?                      @map("confirmed_at") @db.DateTime(0)
+  cancelledAt                              DateTime?                      @map("cancelled_at") @db.DateTime(0)
+  created_at                               DateTime                       @default(now()) @db.DateTime(0)
+  updated_at                               DateTime                       @default(now()) @db.DateTime(0)
   choices                                  ActivitySignupChoice[]
-  activity                                 Activity               @relation(fields: [activityId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_signup_activity")
-  character                                Character              @relation(fields: [characterId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_signup_character")
-  users_activity_signups_handled_byTousers User?                  @relation("activity_signups_handled_byTousers", fields: [handledBy], references: [id], onUpdate: Restrict, map: "fk_signup_handled_by")
-  specs                                    specs?                 @relation(fields: [preferredSpecId], references: [id], onUpdate: Restrict, map: "fk_signup_preferred_spec")
-  user                                     User                   @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_signup_user")
+  activity                                 Activity                       @relation(fields: [activityId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_signup_activity")
+  character                                Character                      @relation(fields: [characterId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_signup_character")
+  users_activity_signups_handled_byTousers User?                          @relation("activity_signups_handled_byTousers", fields: [handledBy], references: [id], onUpdate: Restrict, map: "fk_signup_handled_by")
+  specs                                    specs?                         @relation(fields: [preferredSpecId], references: [id], onUpdate: Restrict, map: "fk_signup_preferred_spec")
+  user                                     User                           @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_signup_user")
   attendanceRecords                        AttendanceRecord[]
+  strategySlots                            ActivityStrategySnapshotSlot[]
 
   @@unique([activityId, userId], map: "uk_activity_user")
   @@index([characterId], map: "fk_signup_character")
@@ -326,6 +337,286 @@ model ActivitySignupChoice {
   @@index([characterId], map: "idx_signup_choice_character")
   @@index([specId], map: "idx_signup_choice_spec")
   @@map("activity_signup_choices")
+}
+
+model RaidProgressPlan {
+  id             BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  raidId         BigInt                @map("raid_id") @db.UnsignedBigInt
+  difficulty     Int                   @db.TinyInt
+  season         String                @db.VarChar(32)
+  name           String                @db.VarChar(128)
+  status         String                @default("ACTIVE") @db.VarChar(16)
+  startedAt      DateTime              @default(now()) @map("started_at") @db.DateTime(0)
+  completedAt    DateTime?             @map("completed_at") @db.DateTime(0)
+  lastSyncedAt   DateTime?             @map("last_synced_at") @db.DateTime(0)
+  syncCursorAt   DateTime?             @map("sync_cursor_at") @db.DateTime(0)
+  syncCursorPage Int                   @default(1) @map("sync_cursor_page") @db.UnsignedInt
+  createdBy      BigInt                @map("created_by") @db.UnsignedBigInt
+  createdAt      DateTime              @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt      DateTime              @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
+  raid           raids                 @relation(fields: [raidId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_raid_progress_plan_raid")
+  creator        User                  @relation(fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_raid_progress_plan_creator")
+  bosses         RaidBossProgress[]
+  strategies     BossStrategy[]
+  raidActivities activity_raid_ext[]
+  syncRuns       RaidProgressSyncRun[]
+  attempts       RaidBossAttempt[]
+
+  @@index([status, difficulty], map: "idx_raid_progress_plan_status")
+  @@index([raidId, season], map: "idx_raid_progress_plan_raid_season")
+    @@unique([raidId, difficulty, season], map: "uk_raid_progress_plan_season")
+  @@map("raid_progress_plans")
+}
+
+model RaidBossProgress {
+  id                BigInt                        @id @default(autoincrement()) @db.UnsignedBigInt
+  progressPlanId    BigInt                        @map("progress_plan_id") @db.UnsignedBigInt
+  bossId            BigInt                        @map("boss_id") @db.UnsignedBigInt
+  wclStatus         String                        @default("NOT_STARTED") @map("wcl_status") @db.VarChar(16)
+  wclBestPercent    Float?                        @map("wcl_best_percent")
+  wclFirstKillAt    DateTime?                     @map("wcl_first_kill_at") @db.DateTime(0)
+  wclLastKillAt     DateTime?                     @map("wcl_last_kill_at") @db.DateTime(0)
+  wclUpdatedAt      DateTime?                     @map("wcl_updated_at") @db.DateTime(0)
+  manualStatus      String?                       @map("manual_status") @db.VarChar(16)
+  manualBestPercent Float?                        @map("manual_best_percent")
+  manualFirstKillAt DateTime?                     @map("manual_first_kill_at") @db.DateTime(0)
+  manualLastKillAt  DateTime?                     @map("manual_last_kill_at") @db.DateTime(0)
+  manualReason      String?                       @map("manual_reason") @db.VarChar(255)
+  manualUpdatedBy   BigInt?                       @map("manual_updated_by") @db.UnsignedBigInt
+  manualUpdatedAt   DateTime?                     @map("manual_updated_at") @db.DateTime(0)
+  defaultStrategyId BigInt?                       @unique(map: "uk_raid_boss_progress_default_strategy") @map("default_strategy_id") @db.UnsignedBigInt
+  createdAt         DateTime                      @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt         DateTime                      @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
+  plan              RaidProgressPlan              @relation(fields: [progressPlanId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_raid_boss_progress_plan")
+  boss              bosses                        @relation(fields: [bossId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_raid_boss_progress_boss")
+  manualUpdater     User?                         @relation("RaidBossProgressManualUpdater", fields: [manualUpdatedBy], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_raid_boss_progress_manual_user")
+  defaultStrategy   BossStrategy?                 @relation("RaidBossProgressDefaultStrategy", fields: [defaultStrategyId], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_raid_boss_progress_default_strategy")
+  attempts          RaidBossAttempt[]
+  overrideLogs      RaidBossProgressOverrideLog[]
+
+  @@unique([progressPlanId, bossId], map: "uk_raid_boss_progress")
+  @@index([bossId], map: "idx_raid_boss_progress_boss")
+  @@map("raid_boss_progress")
+}
+
+model RaidBossProgressOverrideLog {
+  id          BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
+  progressId  BigInt           @map("progress_id") @db.UnsignedBigInt
+  beforeValue Json?            @map("before_value")
+  afterValue  Json             @map("after_value")
+  reason      String?          @db.VarChar(255)
+  updatedBy   BigInt           @map("updated_by") @db.UnsignedBigInt
+  createdAt   DateTime         @default(now()) @map("created_at") @db.DateTime(0)
+  progress    RaidBossProgress @relation(fields: [progressId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_raid_boss_override_progress")
+  user        User             @relation(fields: [updatedBy], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_raid_boss_override_user")
+
+  @@index([progressId, createdAt], map: "idx_raid_boss_override_history")
+  @@map("raid_boss_progress_override_logs")
+}
+
+model RaidProgressSyncRun {
+  id             BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
+  progressPlanId BigInt?           @map("progress_plan_id") @db.UnsignedBigInt
+  zoneId         Int               @map("zone_id")
+  status         String            @default("RUNNING") @db.VarChar(16)
+  reportsRead    Int               @default(0) @map("reports_read") @db.UnsignedInt
+  fightsRead     Int               @default(0) @map("fights_read") @db.UnsignedInt
+  startedAt      DateTime          @default(now()) @map("started_at") @db.DateTime(0)
+  finishedAt     DateTime?         @map("finished_at") @db.DateTime(0)
+  errorMessage   String?           @map("error_message") @db.VarChar(1000)
+  summary        Json?
+  plan           RaidProgressPlan? @relation(fields: [progressPlanId], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_raid_progress_sync_plan")
+
+  @@index([status, startedAt], map: "idx_raid_progress_sync_status")
+  @@index([progressPlanId, startedAt], map: "idx_raid_progress_sync_plan_time")
+  @@map("raid_progress_sync_runs")
+}
+
+model RaidBossAttempt {
+  id             BigInt                   @id @default(autoincrement()) @db.UnsignedBigInt
+  progressPlanId BigInt                   @map("progress_plan_id") @db.UnsignedBigInt
+  progressId     BigInt                   @map("progress_id") @db.UnsignedBigInt
+  encounterId    Int                      @map("encounter_id")
+  difficulty     Int                      @db.TinyInt
+  startedAt      DateTime                 @map("started_at") @db.DateTime(0)
+  durationMs     Int                      @map("duration_ms") @db.UnsignedInt
+  kill           Boolean
+  bossPercent    Float?                   @map("boss_percent")
+  dedupKey       String                   @unique(map: "uk_raid_boss_attempt_dedup") @map("dedup_key") @db.Char(64)
+  createdAt      DateTime                 @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt      DateTime                 @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
+  plan           RaidProgressPlan         @relation(fields: [progressPlanId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_raid_boss_attempt_plan")
+  progress       RaidBossProgress         @relation(fields: [progressId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_raid_boss_attempt_progress")
+  sources        WclReportFightEvidence[]
+
+  @@index([progressId, startedAt], map: "idx_raid_boss_attempt_time")
+  @@index([progressId, difficulty, kill], map: "idx_raid_boss_attempt_kill")
+  @@map("raid_boss_attempts")
+}
+
+model WclReportFightEvidence {
+  id         BigInt          @id @default(autoincrement()) @db.UnsignedBigInt
+  attemptId  BigInt          @map("attempt_id") @db.UnsignedBigInt
+  reportCode String          @map("report_code") @db.VarChar(32)
+  fightId    Int             @map("fight_id") @db.UnsignedInt
+  createdAt  DateTime        @default(now()) @map("created_at") @db.DateTime(0)
+  attempt    RaidBossAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_wcl_fight_evidence_attempt")
+
+  @@unique([reportCode, fightId], map: "uk_wcl_report_fight")
+  @@index([attemptId], map: "idx_wcl_fight_evidence_attempt")
+  @@map("wcl_report_fight_evidence")
+}
+
+model BossStrategy {
+  id             BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  progressPlanId BigInt                @map("progress_plan_id") @db.UnsignedBigInt
+  bossId         BigInt                @map("boss_id") @db.UnsignedBigInt
+  name           String                @db.VarChar(128)
+  description    String?               @db.VarChar(500)
+  status         String                @default("ACTIVE") @db.VarChar(16)
+  createdBy      BigInt                @map("created_by") @db.UnsignedBigInt
+  createdAt      DateTime              @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt      DateTime              @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
+  plan           RaidProgressPlan      @relation(fields: [progressPlanId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_boss_strategy_plan")
+  boss           bosses                @relation(fields: [bossId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_boss_strategy_boss")
+  creator        User                  @relation(fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_boss_strategy_creator")
+  versions       BossStrategyVersion[]
+  defaultFor     RaidBossProgress?     @relation("RaidBossProgressDefaultStrategy")
+
+  @@index([progressPlanId, bossId, status], map: "idx_boss_strategy_plan_boss")
+  @@map("boss_strategies")
+}
+
+model BossStrategyVersion {
+  id              BigInt                     @id @default(autoincrement()) @db.UnsignedBigInt
+  strategyId      BigInt                     @map("strategy_id") @db.UnsignedBigInt
+  versionNo       Int                        @map("version_no") @db.UnsignedInt
+  status          String                     @default("DRAFT") @db.VarChar(16)
+  changeSummary   String?                    @map("change_summary") @db.VarChar(500)
+  createdBy       BigInt                     @map("created_by") @db.UnsignedBigInt
+  publishedBy     BigInt?                    @map("published_by") @db.UnsignedBigInt
+  createdAt       DateTime                   @default(now()) @map("created_at") @db.DateTime(0)
+  publishedAt     DateTime?                  @map("published_at") @db.DateTime(0)
+  strategy        BossStrategy               @relation(fields: [strategyId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_boss_strategy_version_strategy")
+  creator         User                       @relation("BossStrategyVersionCreator", fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_boss_strategy_version_creator")
+  publisher       User?                      @relation("BossStrategyVersionPublisher", fields: [publishedBy], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_boss_strategy_version_publisher")
+  blocks          BossStrategyBlock[]
+  slots           BossStrategySlot[]
+  snapshots       ActivityStrategySnapshot[]
+  activityTargets ActivityRaidTarget[]
+
+  @@unique([strategyId, versionNo], map: "uk_boss_strategy_version")
+  @@index([strategyId, status], map: "idx_boss_strategy_version_status")
+  @@map("boss_strategy_versions")
+}
+
+model BossStrategyBlock {
+  id            BigInt              @id @default(autoincrement()) @db.UnsignedBigInt
+  versionId     BigInt              @map("version_id") @db.UnsignedBigInt
+  type          String              @db.VarChar(24)
+  title         String              @db.VarChar(128)
+  orderIndex    Int                 @default(0) @map("order_index") @db.SmallInt
+  schemaVersion Int                 @default(1) @map("schema_version") @db.UnsignedSmallInt
+  config        Json?
+  markdown      String?             @db.MediumText
+  createdAt     DateTime            @default(now()) @map("created_at") @db.DateTime(0)
+  version       BossStrategyVersion @relation(fields: [versionId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_boss_strategy_block_version")
+
+  @@index([versionId, orderIndex], map: "idx_boss_strategy_block_order")
+  @@map("boss_strategy_blocks")
+}
+
+model BossStrategySlot {
+  id             BigInt              @id @default(autoincrement()) @db.UnsignedBigInt
+  versionId      BigInt              @map("version_id") @db.UnsignedBigInt
+  slotKey        String              @map("slot_key") @db.VarChar(64)
+  label          String              @db.VarChar(128)
+  roleConstraint Int?                @map("role_constraint") @db.TinyInt
+  isRequired     Boolean             @default(false) @map("is_required")
+  orderIndex     Int                 @default(0) @map("order_index") @db.SmallInt
+  version        BossStrategyVersion @relation(fields: [versionId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_boss_strategy_slot_version")
+
+  @@unique([versionId, slotKey], map: "uk_boss_strategy_slot_key")
+  @@index([versionId, orderIndex], map: "idx_boss_strategy_slot_order")
+  @@map("boss_strategy_slots")
+}
+
+model ActivityRaidTarget {
+  id                BigInt                    @id @default(autoincrement()) @db.UnsignedBigInt
+  activityId        BigInt                    @map("activity_id") @db.UnsignedBigInt
+  bossId            BigInt                    @map("boss_id") @db.UnsignedBigInt
+  orderIndex        Int                       @default(0) @map("order_index") @db.SmallInt
+  targetCount       Int?                      @map("target_count") @db.UnsignedSmallInt
+  strategyVersionId BigInt?                   @map("strategy_version_id") @db.UnsignedBigInt
+  status            String                    @default("PLANNED") @db.VarChar(16)
+  createdAt         DateTime                  @default(now()) @map("created_at") @db.DateTime(0)
+  activity          Activity                  @relation(fields: [activityId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_activity_raid_target_activity")
+  boss              bosses                    @relation(fields: [bossId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_activity_raid_target_boss")
+  strategyVersion   BossStrategyVersion?      @relation(fields: [strategyVersionId], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_activity_raid_target_strategy_version")
+  strategySnapshot  ActivityStrategySnapshot?
+
+  @@unique([activityId, bossId], map: "uk_activity_raid_target_boss")
+  @@index([activityId, orderIndex], map: "idx_activity_raid_target_order")
+  @@map("activity_raid_targets")
+}
+
+model ActivityStrategySnapshot {
+  id              BigInt                          @id @default(autoincrement()) @db.UnsignedBigInt
+  targetId        BigInt                          @unique(map: "uk_activity_strategy_snapshot_target") @map("target_id") @db.UnsignedBigInt
+  sourceVersionId BigInt?                         @map("source_version_id") @db.UnsignedBigInt
+  status          String                          @default("EDITING") @db.VarChar(16)
+  createdBy       BigInt                          @map("created_by") @db.UnsignedBigInt
+  lockedBy        BigInt?                         @map("locked_by") @db.UnsignedBigInt
+  createdAt       DateTime                        @default(now()) @map("created_at") @db.DateTime(0)
+  lockedAt        DateTime?                       @map("locked_at") @db.DateTime(0)
+  target          ActivityRaidTarget              @relation(fields: [targetId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_activity_strategy_snapshot_target")
+  sourceVersion   BossStrategyVersion?            @relation(fields: [sourceVersionId], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_activity_strategy_snapshot_source")
+  creator         User                            @relation("ActivityStrategySnapshotCreator", fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_activity_strategy_snapshot_creator")
+  locker          User?                           @relation("ActivityStrategySnapshotLocker", fields: [lockedBy], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_activity_strategy_snapshot_locker")
+  blocks          ActivityStrategySnapshotBlock[]
+  slots           ActivityStrategySnapshotSlot[]
+
+  @@index([sourceVersionId], map: "idx_activity_strategy_snapshot_source")
+  @@map("activity_strategy_snapshots")
+}
+
+model ActivityStrategySnapshotBlock {
+  id            BigInt                   @id @default(autoincrement()) @db.UnsignedBigInt
+  snapshotId    BigInt                   @map("snapshot_id") @db.UnsignedBigInt
+  sourceBlockId BigInt?                  @map("source_block_id") @db.UnsignedBigInt
+  type          String                   @db.VarChar(24)
+  title         String                   @db.VarChar(128)
+  orderIndex    Int                      @default(0) @map("order_index") @db.SmallInt
+  schemaVersion Int                      @default(1) @map("schema_version") @db.UnsignedSmallInt
+  config        Json?
+  markdown      String?                  @db.MediumText
+  snapshot      ActivityStrategySnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_activity_strategy_block_snapshot")
+
+  @@index([snapshotId, orderIndex], map: "idx_activity_strategy_snapshot_block_order")
+  @@map("activity_strategy_snapshot_blocks")
+}
+
+model ActivityStrategySnapshotSlot {
+  id                  BigInt                   @id @default(autoincrement()) @db.UnsignedBigInt
+  snapshotId          BigInt                   @map("snapshot_id") @db.UnsignedBigInt
+  slotKey             String                   @map("slot_key") @db.VarChar(64)
+  label               String                   @db.VarChar(128)
+  signupId            BigInt?                  @map("signup_id") @db.UnsignedBigInt
+  userIdSnapshot      BigInt?                  @map("user_id_snapshot") @db.UnsignedBigInt
+  userNameSnapshot    String?                  @map("user_name_snapshot") @db.VarChar(255)
+  characterIdSnapshot BigInt?                  @map("character_id_snapshot") @db.UnsignedBigInt
+  characterName       String?                  @map("character_name_snapshot") @db.VarChar(64)
+  realmName           String?                  @map("realm_name_snapshot") @db.VarChar(64)
+  className           String?                  @map("class_name_snapshot") @db.VarChar(25)
+  specIdSnapshot      Int?                     @map("spec_id_snapshot")
+  specName            String?                  @map("spec_name_snapshot") @db.VarChar(25)
+  orderIndex          Int                      @default(0) @map("order_index") @db.SmallInt
+  snapshot            ActivityStrategySnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_activity_strategy_slot_snapshot")
+  signup              ActivitySignup?          @relation(fields: [signupId], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_activity_strategy_slot_signup")
+
+  @@unique([snapshotId, slotKey], map: "uk_activity_strategy_slot_key")
+  @@index([signupId], map: "idx_activity_strategy_slot_signup")
+  @@map("activity_strategy_snapshot_slots")
 }
 
 model AttendanceRecord {
@@ -494,6 +785,25 @@ model SiteSetting {
   @@map("site_settings")
 }
 
+model WclGuildProgressSetting {
+  id           Int      @id @default(1)
+  guildId      Int      @default(820881) @map("guild_id")
+  guildName    String   @default("TheTwilightZone") @map("guild_name") @db.VarChar(128)
+  serverId     Int      @default(569) @map("server_id")
+  serverName   String   @default("伊森利恩") @map("server_name") @db.VarChar(64)
+  serverSlug   String   @default("isillien") @map("server_slug") @db.VarChar(64)
+  serverRegion String   @default("CN") @map("server_region") @db.VarChar(16)
+  zoneId       Int      @default(53) @map("zone_id")
+  season       String   @default("current") @db.VarChar(32)
+  updatedBy    BigInt?  @map("updated_by") @db.UnsignedBigInt
+  createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(0)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
+  user         User?    @relation(fields: [updatedBy], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_wcl_guild_progress_setting_user")
+
+  @@map("wcl_guild_progress_settings")
+}
+
+
 model Announcement {
   id           BigInt              @id @default(autoincrement()) @db.UnsignedBigInt
   title        String              @db.VarChar(128)
@@ -549,49 +859,56 @@ model activity_mythic_plus_ext {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model activity_raid_ext {
-  activity_id  BigInt   @id @db.UnsignedBigInt
-  raid_id      BigInt   @db.UnsignedBigInt
-  difficulty   Int      @db.TinyInt
-  mode         Int      @db.TinyInt
-  boss_id      BigInt?  @db.UnsignedBigInt
-  target_count Int?
-  raids        raids    @relation(fields: [raid_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "activity_raid_ext_raids_id_fk")
-  bosses       bosses?  @relation(fields: [boss_id], references: [id], onUpdate: Restrict, map: "fk_activity_raid_boss")
-  activities   Activity @relation(fields: [activity_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_raid_ext_activity")
+  activity_id      BigInt            @id @db.UnsignedBigInt
+  raid_id          BigInt            @db.UnsignedBigInt
+  progress_plan_id BigInt?           @db.UnsignedBigInt
+  difficulty       Int               @db.TinyInt
+  mode             Int               @db.TinyInt
+  boss_id          BigInt?           @db.UnsignedBigInt
+  target_count     Int?
+  raids            raids             @relation(fields: [raid_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "activity_raid_ext_raids_id_fk")
+  progressPlan     RaidProgressPlan? @relation(fields: [progress_plan_id], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_activity_raid_progress_plan")
+  bosses           bosses?           @relation(fields: [boss_id], references: [id], onUpdate: Restrict, map: "fk_activity_raid_boss")
+  activities       Activity          @relation(fields: [activity_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_raid_ext_activity")
 
   @@index([raid_id], map: "activity_raid_ext_raids_id_fk")
   @@index([boss_id], map: "idx_activity_raid_boss_id")
+  @@index([progress_plan_id], map: "idx_activity_raid_progress_plan")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model bosses {
-  id                BigInt              @id @default(autoincrement()) @db.UnsignedBigInt
-  raid_id           BigInt              @db.UnsignedBigInt
+  id                BigInt               @id @default(autoincrement()) @db.UnsignedBigInt
+  raid_id           BigInt               @db.UnsignedBigInt
   wcl_id            Int
-  name              String              @db.VarChar(64)
-  short_name        String?             @db.VarChar(32)
-  order_index       Int                 @default(1) @db.TinyInt
-  icon              String?             @db.VarChar(255)
-  is_final          Int                 @default(0) @db.TinyInt
-  progress          Int                 @default(0) @db.SmallInt
-  created_at        DateTime            @default(now()) @db.DateTime(0)
-  updated_at        DateTime            @default(now()) @db.DateTime(0)
+  name              String               @db.VarChar(64)
+  short_name        String?              @db.VarChar(32)
+  order_index       Int                  @default(1) @db.TinyInt
+  icon              String?              @db.VarChar(255)
+  is_final          Int                  @default(0) @db.TinyInt
+  progress          Int                  @default(0) @db.SmallInt
+  created_at        DateTime             @default(now()) @db.DateTime(0)
+  updated_at        DateTime             @default(now()) @db.DateTime(0)
   activity_raid_ext activity_raid_ext[]
-  raids             raids               @relation(fields: [raid_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_boss_raid")
+  raidProgress      RaidBossProgress[]
+  bossStrategies    BossStrategy[]
+  activityTargets   ActivityRaidTarget[]
+  raids             raids                @relation(fields: [raid_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_boss_raid")
 
   @@unique([raid_id, name], map: "uk_raid_boss")
+  @@unique([raid_id, wcl_id], map: "uk_raid_boss_wcl_id")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model classes {
-  id          Int     @id @default(autoincrement())
-  wclId       Int?    @unique(map: "uk_classes_wcl_id") @map("wcl_id")
-  wclSlug     String? @map("wcl_slug") @db.VarChar(32)
-  name        String? @db.VarChar(25)
-  en_name     String? @db.VarChar(25)
-  icon        String? @db.VarChar(255)
-  color       String? @db.VarChar(25)
-  description String? @db.Text
+  id          Int         @id @default(autoincrement())
+  wclId       Int?        @unique(map: "uk_classes_wcl_id") @map("wcl_id")
+  wclSlug     String?     @map("wcl_slug") @db.VarChar(32)
+  name        String?     @db.VarChar(25)
+  en_name     String?     @db.VarChar(25)
+  icon        String?     @db.VarChar(255)
+  color       String?     @db.VarChar(25)
+  description String?     @db.Text
   specs       specs[]
   characters  Character[]
 }
@@ -642,6 +959,7 @@ model raids {
   id                BigInt              @id @default(autoincrement()) @db.UnsignedBigInt
   name              String              @unique(map: "uk_raid_name") @db.VarChar(64)
   wcl_id            Int
+  wclZoneId         Int?                 @unique(map: "uk_raid_wcl_zone_id") @map("wcl_zone_id")
   short_name        String?             @db.VarChar(32)
   expansion         String?             @db.VarChar(32)
   season            String?             @db.VarChar(32)
@@ -654,6 +972,7 @@ model raids {
   updated_at        DateTime            @default(now()) @db.DateTime(0)
   activity_raid_ext activity_raid_ext[]
   bosses            bosses[]
+  progressPlans     RaidProgressPlan[]
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -671,6 +990,6 @@ model specs {
   attendance_records      AttendanceRecord[]
   classes                 classes                @relation(fields: [class], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "specs_classes_id_fk")
 
-  @@index([class], map: "specs_classes_id_fk")
   @@unique([class, wclId], map: "uk_specs_class_wcl_id")
+  @@index([class], map: "specs_classes_id_fk")
 }

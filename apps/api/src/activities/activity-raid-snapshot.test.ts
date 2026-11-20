@@ -1,0 +1,92 @@
+import { describe, expect, it, vi } from "vitest";
+import type { AuthUser } from "../auth/auth.types";
+import type { PrismaService } from "../database/prisma.service";
+import { ActivitiesService } from "./activities.service";
+
+describe("raid activity strategy snapshots", () => {
+  it("copies the selected published strategy into a physical activity snapshot", async () => {
+    const createActivity = vi.fn().mockResolvedValue({ id: 99n });
+    const prisma = {
+      activityType: { findUnique: vi.fn().mockResolvedValue({ id: 1n }) },
+      raidProgressPlan: {
+        findUnique: vi.fn().mockResolvedValue({ id: 2n, raidId: 3n, difficulty: 3 }),
+      },
+      raidBossProgress: {
+        findMany: vi.fn().mockResolvedValue([{ bossId: 4n }]),
+      },
+      bossStrategyVersion: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: 5n,
+            strategy: { bossId: 4n },
+            blocks: [
+              {
+                id: 6n,
+                type: "NOTES",
+                title: "核心机制",
+                orderIndex: 0,
+                schemaVersion: 1,
+                config: null,
+                markdown: "先躲技能",
+              },
+            ],
+            slots: [
+              {
+                slotKey: "main-tank",
+                label: "主坦",
+                roleConstraint: 1,
+                isRequired: true,
+                orderIndex: 0,
+              },
+            ],
+          },
+        ]),
+      },
+      $transaction: vi.fn(async (callback) => callback({ activity: { create: createActivity } })),
+    } as unknown as PrismaService;
+
+    await new ActivitiesService(prisma).create(
+      {
+        name: "史诗团本开荒",
+        type: "raid_progress",
+        description: "",
+        beginAt: "2026-12-01T12:00:00.000Z",
+        signupDeadline: "2026-12-01T10:00:00.000Z",
+        durationMinutes: 180,
+        maxPlayers: 20,
+        raid: {
+          progressPlanId: "2",
+          mode: "PROGRESSION",
+          targets: [{ bossId: "4", orderIndex: 0, strategyVersionId: "5" }],
+        },
+      },
+      admin(),
+    );
+
+    const data = createActivity.mock.calls[0]?.[0].data;
+    expect(data.raidTargets.create[0]).toMatchObject({
+      bossId: 4n,
+      strategyVersionId: 5n,
+      strategySnapshot: {
+        create: {
+          sourceVersionId: 5n,
+          blocks: { create: [expect.objectContaining({ sourceBlockId: 6n, markdown: "先躲技能" })] },
+          slots: { create: [expect.objectContaining({ slotKey: "main-tank", label: "主坦" })] },
+        },
+      },
+    });
+  });
+});
+
+function admin(): AuthUser {
+  return {
+    id: 7n,
+    name: "Admin",
+    wxNickname: null,
+    guildNickname: null,
+    privilege: 1,
+    isApproved: true,
+    profileComplete: true,
+    status: 1,
+  };
+}

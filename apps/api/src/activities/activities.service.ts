@@ -1,12 +1,11 @@
 import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import type { CreateActivityInput, Role, SignupInput, UpdateActivityInput } from "@ttz/contracts";
+import type { CreateActivityInput, SignupInput, UpdateActivityInput } from "@ttz/contracts";
 import type { AuthUser } from "../auth/auth.types";
 import { PrismaService } from "../database/prisma.service";
 import { characterInclude, serializeCharacter } from "../members/characters.service";
 import {
   activityCodeToStatus,
   attendanceStatusToCode,
-  roleToCode,
   signupCodeToStatus,
   signupStatusToCode,
 } from "./activity.constants";
@@ -78,6 +77,15 @@ export class ActivitiesService {
           },
           orderBy: [{ groupNo: "asc" }, { orderIndex: "asc" }],
         },
+        activity_raid_ext: { include: { raids: true } },
+        raidTargets: {
+          orderBy: { orderIndex: "asc" },
+          include: {
+            boss: true,
+            strategyVersion: { include: { strategy: true } },
+            strategySnapshot: { include: { blocks: { orderBy: { orderIndex: "asc" } } } },
+          },
+        },
       },
     });
     if (!activity) throw new NotFoundException({ code: "ACTIVITY_NOT_FOUND", message: "活动不存在" });
@@ -124,6 +132,32 @@ export class ActivitiesService {
       canChangeMySignup,
       mySignup: mySignup ? serializeSignup(mySignup, canManage) : null,
       signups: activity.signups.map((signup) => serializeSignup(signup, canManage)),
+      raid: activity.activity_raid_ext
+        ? {
+            progressPlanId: activity.activity_raid_ext.progress_plan_id?.toString() ?? "",
+            raidName: activity.activity_raid_ext.raids.name,
+            difficulty: activity.activity_raid_ext.difficulty === 3 ? "MYTHIC" : "HEROIC",
+            mode: activity.activity_raid_ext.mode === 1 ? "PROGRESSION" : "FARM",
+            targets: activity.raidTargets.map((target) => ({
+              id: target.id.toString(),
+              bossId: target.bossId.toString(),
+              bossName: target.boss.name,
+              wclId: target.boss.wcl_id,
+              orderIndex: target.orderIndex,
+              strategyName: target.strategyVersion?.strategy.name ?? "空白战术",
+              strategyVersionNo: target.strategyVersion?.versionNo ?? null,
+              strategySnapshotId: target.strategySnapshot?.id.toString() ?? null,
+              blocks:
+                target.strategySnapshot?.blocks.map((block) => ({
+                  type: block.type,
+                  title: block.title,
+                  orderIndex: block.orderIndex,
+                  config: isJsonRecord(block.config) ? block.config : null,
+                  markdown: block.markdown,
+                })) ?? [],
+            })),
+          }
+        : null,
     };
   }
 
@@ -131,25 +165,121 @@ export class ActivitiesService {
     const type = await this.prisma.activityType.findUnique({ where: { code: input.type } });
     if (!type) throw new ConflictException({ code: "ACTIVITY_TYPE_NOT_READY", message: "活动类型基础数据尚未配置" });
     const beginAt = new Date(input.beginAt);
-    return this.prisma.activity.create({
-      data: {
-        name: input.name,
-        type: type.id,
-        creator: user.id,
-        description: input.description,
-        passphrase: input.passphrase,
-        beginAt,
-        teamUpAt: input.teamUpAt ? new Date(input.teamUpAt) : new Date(beginAt.getTime() - 20 * 60_000),
-        endAt: new Date(beginAt.getTime() + input.durationMinutes * 60_000),
-        signupDeadline: new Date(input.signupDeadline),
-        durationMinutes: input.durationMinutes,
-        maxPlayers: input.maxPlayers,
-        tankSlots: input.tankSlots,
-        healerSlots: input.healerSlots,
-        meleeSlots: input.meleeSlots,
-        rangedSlots: input.rangedSlots,
-        attendanceEnabled: (input.attendanceEnabled ?? input.type === "raid_progress") ? 1 : 0,
-      },
+    const raid = input.raid;
+    const raidPlan = raid
+      ? await this.prisma.raidProgressPlan.findUnique({
+          where: { id: BigInt(raid.progressPlanId) },
+          select: { id: true, raidId: true, difficulty: true },
+        })
+      : null;
+    if (raid && !raidPlan)
+      throw new NotFoundException({ code: "RAID_PROGRESS_PLAN_NOT_FOUND", message: "团本进度计划不存在" });
+    const raidTargets = raid && raidPlan ? await this.prepareRaidTargets(raidPlan.id, raid.targets) : [];
+    return this.prisma.$transaction(async (transaction) => {
+      return transaction.activity.create({
+        data: {
+          name: input.name,
+          type: type.id,
+          creator: user.id,
+          description: input.description,
+          passphrase: input.passphrase,
+          beginAt,
+          teamUpAt: input.teamUpAt ? new Date(input.teamUpAt) : new Date(beginAt.getTime() - 20 * 60_000),
+          endAt: new Date(beginAt.getTime() + input.durationMinutes * 60_000),
+          signupDeadline: new Date(input.signupDeadline),
+          durationMinutes: input.durationMinutes,
+          maxPlayers: input.maxPlayers,
+          tankSlots: input.tankSlots,
+          healerSlots: input.healerSlots,
+          meleeSlots: input.meleeSlots,
+          rangedSlots: input.rangedSlots,
+          attendanceEnabled: (input.attendanceEnabled ?? input.type === "raid_progress") ? 1 : 0,
+          ...(raidPlan && raid
+            ? {
+                activity_raid_ext: {
+                  create: {
+                    raid_id: raidPlan.raidId,
+                    progress_plan_id: raidPlan.id,
+                    difficulty: raidPlan.difficulty,
+                    mode: raid.mode === "PROGRESSION" ? 1 : 2,
+                  },
+                },
+                raidTargets: {
+                  create: raidTargets.map((target) => ({
+                    bossId: target.bossId,
+                    orderIndex: target.orderIndex,
+                    targetCount: target.targetCount,
+                    strategyVersionId: target.versionId,
+                    strategySnapshot: {
+                      create: {
+                        sourceVersionId: target.versionId,
+                        createdBy: user.id,
+                        blocks: { create: target.blocks },
+                        slots: { create: target.slots },
+                      },
+                    },
+                  })),
+                },
+              }
+            : {}),
+        },
+      });
+    });
+  }
+
+  private async prepareRaidTargets(planId: bigint, targets: NonNullable<CreateActivityInput["raid"]>["targets"]) {
+    const bosses = await this.prisma.raidBossProgress.findMany({
+      where: { progressPlanId: planId, bossId: { in: targets.map((target) => BigInt(target.bossId)) } },
+      select: { bossId: true },
+    });
+    if (bosses.length !== targets.length)
+      throw new ConflictException({ code: "RAID_TARGET_INVALID", message: "目标 Boss 不属于所选进度计划" });
+    const versionIds = targets.flatMap((target) =>
+      target.strategyVersionId ? [BigInt(target.strategyVersionId)] : [],
+    );
+    const versions = versionIds.length
+      ? await this.prisma.bossStrategyVersion.findMany({
+          where: { id: { in: versionIds }, status: "PUBLISHED", strategy: { progressPlanId: planId } },
+          include: {
+            strategy: { select: { bossId: true } },
+            blocks: { orderBy: { orderIndex: "asc" } },
+            slots: { orderBy: { orderIndex: "asc" } },
+          },
+        })
+      : [];
+    const versionsById = new Map(versions.map((version) => [version.id.toString(), version]));
+    return targets.map((target) => {
+      const version = target.strategyVersionId ? versionsById.get(target.strategyVersionId) : undefined;
+      if (target.strategyVersionId && (!version || version.strategy.bossId.toString() !== target.bossId)) {
+        throw new ConflictException({
+          code: "RAID_STRATEGY_VERSION_INVALID",
+          message: "战术版本必须是该 Boss 的已发布版本",
+        });
+      }
+      return {
+        bossId: BigInt(target.bossId),
+        orderIndex: target.orderIndex,
+        targetCount: target.targetCount ?? null,
+        versionId: version?.id ?? null,
+        blocks:
+          version?.blocks.map((block) => ({
+            sourceBlockId: block.id,
+            type: block.type,
+            title: block.title,
+            orderIndex: block.orderIndex,
+            schemaVersion: block.schemaVersion,
+            config: block.config ?? undefined,
+            markdown: block.markdown,
+          })) ?? [],
+        slots:
+          version?.slots.map((slot) => ({
+            slotKey: slot.slotKey,
+            label: slot.label,
+            roleConstraint: slot.roleConstraint,
+            isRequired: slot.isRequired,
+            orderIndex: slot.orderIndex,
+          })) ?? [],
+      };
     });
   }
 
@@ -659,6 +789,10 @@ function versionConflict() {
     code: "VERSION_CONFLICT",
     message: "活动已被其他人更新，请刷新后重试",
   });
+}
+
+function isJsonRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
 const roleCodeToRole = [null, "TANK", "HEALER", "MELEE", "RANGED"] as const;

@@ -14,6 +14,7 @@ import { DatabaseModule } from "./database/database.module";
 import { HealthController } from "./health.controller";
 import { MembersModule } from "./members/members.module";
 import { PublicModule } from "./public/public.module";
+import { RaidProgressModule } from "./raid-progress/raid-progress.module";
 import { WarcraftLogsModule } from "./warcraft-logs/warcraft-logs.module";
 
 @Module({
@@ -27,6 +28,7 @@ import { WarcraftLogsModule } from "./warcraft-logs/warcraft-logs.module";
     AttendanceModule,
     WarcraftLogsModule,
     PublicModule,
+    RaidProgressModule,
   ],
   controllers: [HealthController],
   providers: [
