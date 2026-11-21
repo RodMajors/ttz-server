@@ -955,10 +955,17 @@ export const strategyRequirementBlockSchema = z.strictObject({
   orderIndex: z.number().int().min(0).max(1000),
   markdown: z.string().max(200_000).nullable().optional(),
 });
-export const strategyPresetSaveSchema = z.strictObject({
-  changeSummary: z.string().trim().max(500).nullable().optional(),
-  items: z.array(strategyPresetItemSchema).max(250),
-});
+export const strategyPresetSaveSchema = z
+  .strictObject({
+    changeSummary: z.string().trim().max(500).nullable().optional(),
+    items: z.array(strategyPresetItemSchema).max(250),
+  })
+  .superRefine((value, context) => {
+    const orderIndexes = value.items.map((item) => item.orderIndex);
+    if (new Set(orderIndexes).size !== orderIndexes.length) {
+      context.addIssue({ code: "custom", path: ["items"], message: "战术内容项顺序不能重复" });
+    }
+  });
 export type StrategyPresetSaveInput = z.infer<typeof strategyPresetSaveSchema>;
 
 export const strategyActivityTaskSchema = strategyRequirementSchema.extend({
