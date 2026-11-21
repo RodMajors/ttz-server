@@ -1,0 +1,14 @@
+packages/contracts/src/index.ts
+  h_745ff005454789 958-968
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4d89dd343335df5064643f10c214acf15442742d",
+  "prompts": {},
+  "humans": {
+    "h_745ff005454789": {
+      "author": "RodMajors <pro-vana@outlook.com>"
+    }
+  }
+}
