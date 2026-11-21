@@ -6,11 +6,18 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import type { ActivityStrategyAssignmentsInput, PositioningCanvas, StrategyTaskInput } from "@ttz/contracts";
+import type {
+  ActivityStrategyAssignmentsInput,
+  PositioningCanvas,
+  StrategyActivitySaveInput,
+  StrategyPresetSaveInput,
+} from "@ttz/contracts";
 import type { Prisma } from "@ttz/database";
 import { WarcraftLogsClient, type WclFightMetricGraph, type WclFightMetricPoint } from "@ttz/warcraft-logs";
 import { assetUrl } from "../common/asset-url";
 import { PrismaService } from "../database/prisma.service";
+import { serializeTacticalPeople, toBookingIds, validateActivityTactics } from "./activity-tactics";
+import { validateRequirementCatalog } from "./strategy-requirements";
 
 type GuildSettingInput = {
   guildId: number;
@@ -29,21 +36,6 @@ type ManualOverrideInput = {
   lastKillAt: string | null;
   reason: string | null;
 };
-type StrategyBlockInput = {
-  type: string;
-  title: string;
-  orderIndex: number;
-  config?: Record<string, unknown> | null;
-  markdown?: string | null;
-};
-type StrategySlotInput = {
-  slotKey: string;
-  label: string;
-  roleConstraint?: number | null;
-  isRequired: boolean;
-  orderIndex: number;
-};
-
 const raidProgressPlanInclude = {
   raid: { select: { name: true, wclZoneId: true, icon: true, background: true } },
   bosses: {
@@ -476,57 +468,6 @@ export class RaidProgressService {
     return { id, isActive };
   }
 
-  private async validateStrategyTasks(slotKeys: string[], tasks: StrategyTaskInput[]) {
-    const validSlotKeys = new Set(slotKeys);
-    const referencedSlots = tasks.flatMap((task) =>
-      [task.executorSlotKey, task.targetSlotKey, task.fallbackSlotKey].filter((key): key is string => Boolean(key)),
-    );
-    if (referencedSlots.some((key) => !validSlotKeys.has(key)))
-      throw new ConflictException({
-        code: "STRATEGY_TASK_SLOT_INVALID",
-        message: "任务引用了当前版本不存在的参与者槽位",
-      });
-    const typeIds = [...new Set(tasks.map((task) => task.taskTypeId))];
-    const taskTypes = typeIds.length
-      ? await this.prisma.strategyTaskType.findMany({
-          where: { id: { in: typeIds }, isActive: true },
-          select: { id: true },
-        })
-      : [];
-    if (taskTypes.length !== typeIds.length)
-      throw new ConflictException({ code: "STRATEGY_TASK_TYPE_INVALID", message: "任务类型不存在或已停用" });
-    const encounterIds = [
-      ...new Set(tasks.flatMap((task) => (task.encounterSpellId == null ? [] : [task.encounterSpellId]))),
-    ];
-    const playerIds = [...new Set(tasks.flatMap((task) => (task.playerSpellId == null ? [] : [task.playerSpellId])))];
-    const [encounterSpells, playerSpells] = await Promise.all([
-      encounterIds.length
-        ? this.prisma.gameSpell.findMany({
-            where: { id: { in: encounterIds }, sourceType: "ENCOUNTER", isActive: true },
-            select: { id: true },
-          })
-        : [],
-      playerIds.length
-        ? this.prisma.gameSpell.findMany({
-            where: { id: { in: playerIds }, sourceType: "PLAYER", isActive: true },
-            select: { id: true },
-          })
-        : [],
-    ]);
-    if (encounterSpells.length !== encounterIds.length || playerSpells.length !== playerIds.length)
-      throw new ConflictException({
-        code: "STRATEGY_TASK_SPELL_INVALID",
-        message: "任务技能不存在、已停用或技能来源类型不匹配",
-      });
-    const conflicts = findTimelineConflicts(tasks);
-    if (conflicts.length)
-      throw new ConflictException({
-        code: "STRATEGY_TASK_TIME_CONFLICT",
-        message: "同一执行者被安排了重叠的时间轴任务",
-        conflicts,
-      });
-  }
-
   async listStrategiesForManagement() {
     const strategies = await this.prisma.bossStrategy.findMany({
       include: {
@@ -651,7 +592,7 @@ export class RaidProgressService {
         name: input.name,
         description: input.description ?? null,
         createdBy: userId,
-        versions: { create: { versionNo: 1, createdBy: userId } },
+        versions: { create: { versionNo: 1, createdBy: userId, contentMode: "REQUIREMENTS" } },
       },
       include: { versions: true },
     });
@@ -669,7 +610,7 @@ export class RaidProgressService {
     const source = strategy.versions[0];
     return this.prisma.$transaction(async (tx) => {
       const version = await tx.bossStrategyVersion.create({
-        data: { strategyId, versionNo: (source?.versionNo ?? 0) + 1, createdBy: userId },
+        data: { strategyId, versionNo: (source?.versionNo ?? 0) + 1, createdBy: userId, contentMode: "REQUIREMENTS" },
       });
       if (source) await copyVersion(tx, source.id, version.id);
       return { id: version.id.toString(), versionNo: version.versionNo };
@@ -688,57 +629,25 @@ export class RaidProgressService {
     return serializeVersion(version);
   }
 
-  async saveDraftVersion(
-    versionId: bigint,
-    input: {
-      changeSummary?: string | null;
-      blocks: StrategyBlockInput[];
-      slots: StrategySlotInput[];
-      tasks?: StrategyTaskInput[];
-    },
-  ) {
-    const version = await this.prisma.bossStrategyVersion.findUnique({ where: { id: versionId } });
-    if (!version) throw new NotFoundException({ code: "STRATEGY_VERSION_NOT_FOUND", message: "战术版本不存在" });
-    if (version.status !== "DRAFT")
-      throw new ConflictException({ code: "STRATEGY_VERSION_IMMUTABLE", message: "已发布版本不可修改" });
-    const tasks = input.tasks ?? [];
-    await this.validateStrategyTasks(
-      input.slots.map((slot) => slot.slotKey),
-      tasks,
-    );
+  async savePreset(versionId: bigint, input: StrategyPresetSaveInput) {
     await this.prisma.$transaction(async (tx) => {
-      await tx.bossStrategyVersion.update({
-        where: { id: versionId },
-        data: { changeSummary: input.changeSummary ?? null },
+      const changed = await tx.bossStrategyVersion.updateMany({
+        where: { id: versionId, status: "DRAFT", strategy: { status: "ACTIVE" } },
+        data: { changeSummary: input.changeSummary ?? null, contentMode: "REQUIREMENTS" },
       });
+      if (!changed.count)
+        throw new ConflictException({ code: "STRATEGY_VERSION_IMMUTABLE", message: "只能编辑启用方案的草稿" });
+      await validateRequirementCatalog(tx, input.tasks);
       await tx.bossStrategyBlock.deleteMany({ where: { versionId } });
       await tx.bossStrategySlot.deleteMany({ where: { versionId } });
       await tx.bossStrategyTask.deleteMany({ where: { versionId } });
-      for (const block of input.blocks) {
-        await tx.bossStrategyBlock.create({
-          data: {
-            versionId,
-            type: block.type,
-            title: block.title,
-            orderIndex: block.orderIndex,
-            config: block.config as Prisma.InputJsonValue | undefined,
-            markdown: block.markdown ?? null,
-          },
+      if (input.blocks.length)
+        await tx.bossStrategyBlock.createMany({ data: input.blocks.map((block) => ({ ...block, versionId })) });
+      const order = { SEQUENCE: 0, TIMELINE: 0 };
+      if (input.tasks.length)
+        await tx.bossStrategyTask.createMany({
+          data: input.tasks.map((task) => requirementData(versionId, { ...task, orderIndex: order[task.kind]++ })),
         });
-      }
-      if (input.slots.length)
-        await tx.bossStrategySlot.createMany({
-          data: input.slots.map((slot) => ({
-            versionId,
-            slotKey: slot.slotKey,
-            label: slot.label,
-            roleConstraint: slot.roleConstraint ?? null,
-            isRequired: slot.isRequired,
-            orderIndex: slot.orderIndex,
-          })),
-        });
-      if (tasks.length)
-        await tx.bossStrategyTask.createMany({ data: tasks.map((task) => strategyTaskCreateData(versionId, task)) });
     });
     return this.getStrategyVersion(versionId, true);
   }
@@ -751,9 +660,14 @@ export class RaidProgressService {
     if (!version) throw new NotFoundException({ code: "STRATEGY_VERSION_NOT_FOUND", message: "战术版本不存在" });
     if (version.status !== "DRAFT")
       throw new ConflictException({ code: "STRATEGY_VERSION_IMMUTABLE", message: "该版本已发布" });
+    if (version.contentMode === "LEGACY")
+      throw new ConflictException({
+        code: "STRATEGY_PRESET_UPGRADE_REQUIRED",
+        message: "请先保存草稿，将其转换为新版预设后再发布",
+      });
     const row = await this.prisma.$transaction(async (tx) => {
       const published = await tx.bossStrategyVersion.update({
-        where: { id: versionId },
+        where: { id: versionId, status: "DRAFT", contentMode: "REQUIREMENTS", strategy: { status: "ACTIVE" } },
         data: { status: "PUBLISHED", publishedBy: userId, publishedAt: new Date() },
       });
       if (makeDefault)
@@ -850,6 +764,112 @@ export class RaidProgressService {
         });
       }
       return { snapshotId: snapshotId.toString(), revision: input.revision + 1, updated: true };
+    });
+  }
+
+  async saveActivityTactics(
+    activityId: bigint,
+    snapshotId: bigint,
+    input: StrategyActivitySaveInput,
+    editor: { id: bigint; privilege: number },
+  ) {
+    const activity = await this.prisma.activity.findFirst({ where: { id: activityId, isDeleted: 0 } });
+    if (!activity) throw new NotFoundException({ code: "ACTIVITY_NOT_FOUND", message: "活动不存在" });
+    if (activity.creator !== editor.id && editor.privilege < 1)
+      throw new ForbiddenException({ code: "ACTIVITY_NOT_OWNED", message: "只能管理自己负责活动的战术" });
+    if (activity.status >= 2 || activity.rosterLockedAt)
+      throw new ConflictException({ code: "ACTIVITY_ROSTER_LOCKED", message: "名单已锁定或活动已结束" });
+    return this.prisma.$transaction(async (tx) => {
+      const activityChanged = await tx.activity.updateMany({
+        where: { id: activityId, isDeleted: 0, version: activity.version, rosterLockedAt: null, status: { lt: 2 } },
+        data: { version: { increment: 1 } },
+      });
+      if (!activityChanged.count)
+        throw new ConflictException({ code: "VERSION_CONFLICT", message: "活动已变化，请刷新后重试" });
+      const changed = await tx.activityStrategySnapshot.updateMany({
+        where: {
+          id: snapshotId,
+          target: { activityId },
+          revision: input.revision,
+          status: "EDITING",
+          assignmentMode: "DIRECT",
+        },
+        data: { revision: { increment: 1 } },
+      });
+      if (!changed.count)
+        throw new ConflictException({
+          code: "VERSION_CONFLICT",
+          message: "战术快照已变化、已锁定或属于旧版，请刷新后重试",
+        });
+      const { typeById, spellById } = await validateRequirementCatalog(tx, input.tasks);
+      const bindings = input.tasks.map((task) => ({
+        ...task,
+        ...toBookingIds(task),
+        playerSpell: task.playerSpellId == null ? null : spellById.get(task.playerSpellId),
+      }));
+      await validateActivityTactics(tx, activityId, bindings, false);
+      const [currentTasks, currentNotes] = await Promise.all([
+        tx.activityStrategySnapshotTask.findMany({ where: { snapshotId }, select: { id: true } }),
+        tx.activityStrategySnapshotBlock.findMany({ where: { snapshotId, type: "NOTES" }, select: { id: true } }),
+      ]);
+      const validateIds = (items: { id?: string }[], existing: { id: bigint }[]) => {
+        const ids = items.flatMap((item) => (item.id == null ? [] : [BigInt(item.id)]));
+        const allowed = new Set(existing.map((item) => item.id));
+        if (new Set(ids).size !== ids.length || ids.some((id) => !allowed.has(id)))
+          throw new ConflictException({
+            code: "STRATEGY_ITEM_INVALID",
+            message: "任务或笔记不属于本场快照，或存在重复引用",
+          });
+        return ids;
+      };
+      const taskIds = validateIds(input.tasks, currentTasks);
+      const noteIds = validateIds(input.notes, currentNotes);
+      await tx.activityStrategySnapshotTask.deleteMany({
+        where: { snapshotId, ...(taskIds.length ? { id: { notIn: taskIds } } : {}) },
+      });
+      await tx.activityStrategySnapshotBlock.deleteMany({
+        where: { snapshotId, type: "NOTES", ...(noteIds.length ? { id: { notIn: noteIds } } : {}) },
+      });
+      const order = { SEQUENCE: 0, TIMELINE: 0 };
+      for (const task of bindings) {
+        const {
+          kind,
+          label,
+          taskTypeId,
+          notes,
+          executorSignupId,
+          fallbackSignupId,
+          targetSignupId,
+          encounterSpellId,
+          playerSpellId,
+        } = task;
+        const data = {
+          kind,
+          label,
+          taskTypeId,
+          notes: notes ?? null,
+          orderIndex: order[kind]++,
+          executorSignupId,
+          fallbackSignupId,
+          targetSignupId,
+          encounterSpellId: encounterSpellId ?? null,
+          playerSpellId: playerSpellId ?? null,
+          taskTypeLabelSnapshot: typeById.get(taskTypeId)?.label ?? label,
+          encounterSpellNameSnapshot: encounterSpellId == null ? null : (spellById.get(encounterSpellId)?.name ?? null),
+          playerSpellNameSnapshot: playerSpellId == null ? null : (spellById.get(playerSpellId)?.name ?? null),
+          offsetMs: kind === "TIMELINE" ? (task.offsetMs ?? null) : null,
+          windowMs: kind === "TIMELINE" ? (task.windowMs ?? null) : null,
+        };
+        if (task.id) await tx.activityStrategySnapshotTask.update({ where: { id: BigInt(task.id) }, data });
+        else await tx.activityStrategySnapshotTask.create({ data: { snapshotId, ...data } });
+      }
+      for (const [orderIndex, note] of input.notes.entries()) {
+        const { title, markdown } = note;
+        const data = { type: "NOTES", title, markdown, orderIndex };
+        if (note.id) await tx.activityStrategySnapshotBlock.update({ where: { id: BigInt(note.id) }, data });
+        else await tx.activityStrategySnapshotBlock.create({ data: { snapshotId, ...data } });
+      }
+      return { snapshotId: String(snapshotId), revision: input.revision + 1 };
     });
   }
 
@@ -990,8 +1010,11 @@ export class RaidProgressService {
             id: target.strategySnapshot.id.toString(),
             status: target.strategySnapshot.status,
             revision: target.strategySnapshot.revision,
+            assignmentMode: target.strategySnapshot.assignmentMode,
             lockedAt: target.strategySnapshot.lockedAt?.toISOString() ?? null,
-            tasks: target.strategySnapshot.tasks.map(serializeSnapshotTask),
+            tasks: target.strategySnapshot.tasks.map((task) =>
+              serializeSnapshotTask(task, target.strategySnapshot?.status === "LOCKED"),
+            ),
             blocks: target.strategySnapshot.blocks.map((block) => ({
               id: block.id.toString(),
               type: block.type,
@@ -1020,56 +1043,30 @@ export class RaidProgressService {
 }
 
 async function copyVersion(tx: Prisma.TransactionClient, sourceId: bigint, targetId: bigint) {
-  const [blocks, slots, tasks] = await Promise.all([
+  const [blocks, tasks] = await Promise.all([
     tx.bossStrategyBlock.findMany({ where: { versionId: sourceId } }),
-    tx.bossStrategySlot.findMany({ where: { versionId: sourceId } }),
     tx.bossStrategyTask.findMany({ where: { versionId: sourceId } }),
   ]);
   if (blocks.length)
     await tx.bossStrategyBlock.createMany({
-      data: blocks.map((block) => ({
+      data: blocks.map(({ type, title, orderIndex, markdown }) => ({
         versionId: targetId,
-        type: block.type,
-        title: block.title,
-        orderIndex: block.orderIndex,
-        schemaVersion: block.schemaVersion,
-        config: block.config ?? undefined,
-        markdown: block.markdown,
-      })),
-    });
-  if (slots.length)
-    await tx.bossStrategySlot.createMany({
-      data: slots.map((slot) => ({
-        versionId: targetId,
-        slotKey: slot.slotKey,
-        label: slot.label,
-        roleConstraint: slot.roleConstraint,
-        isRequired: slot.isRequired,
-        orderIndex: slot.orderIndex,
+        type,
+        title,
+        orderIndex,
+        markdown,
       })),
     });
   if (tasks.length)
-    await tx.bossStrategyTask.createMany({
-      data: tasks.map((task) => ({
-        versionId: targetId,
-        taskTypeId: task.taskTypeId,
-        kind: task.kind,
-        orderIndex: task.orderIndex,
-        label: task.label,
-        encounterSpellId: task.encounterSpellId,
-        playerSpellId: task.playerSpellId,
-        executorSlotKey: task.executorSlotKey,
-        targetSlotKey: task.targetSlotKey,
-        fallbackSlotKey: task.fallbackSlotKey,
-        notes: task.notes,
-        repeatRule: task.repeatRule,
-        offsetMs: task.offsetMs,
-        windowMs: task.windowMs,
-        phaseLabel: task.phaseLabel,
-        occurrence: task.occurrence,
-        reminderMs: task.reminderMs,
-      })),
-    });
+    await tx.bossStrategyTask.createMany({ data: tasks.map((task) => requirementData(targetId, task)) });
+}
+
+function requirementData(
+  versionId: bigint,
+  task: Omit<StrategyPresetSaveInput["tasks"][number], "kind"> & { kind: string },
+) {
+  const { kind, orderIndex, label, notes, taskTypeId, encounterSpellId, playerSpellId } = task;
+  return { versionId, kind, orderIndex, label, notes, taskTypeId, encounterSpellId, playerSpellId };
 }
 
 function defaultGuildSetting() {
@@ -1245,53 +1242,6 @@ function serializePlan(plan: RaidProgressPlanWithBosses) {
     }),
   };
 }
-function strategyTaskCreateData(versionId: bigint, task: StrategyTaskInput) {
-  return {
-    versionId,
-    taskTypeId: task.taskTypeId,
-    kind: task.kind,
-    orderIndex: task.orderIndex,
-    label: task.label,
-    encounterSpellId: task.encounterSpellId ?? null,
-    playerSpellId: task.playerSpellId ?? null,
-    executorSlotKey: task.executorSlotKey,
-    targetSlotKey: task.targetSlotKey ?? null,
-    fallbackSlotKey: task.fallbackSlotKey ?? null,
-    notes: task.notes ?? null,
-    repeatRule: task.repeatRule ?? null,
-    offsetMs: task.offsetMs ?? null,
-    windowMs: task.windowMs ?? null,
-    phaseLabel: task.phaseLabel ?? null,
-    occurrence: task.occurrence ?? null,
-    reminderMs: task.reminderMs ?? null,
-  };
-}
-
-export function findTimelineConflicts(tasks: StrategyTaskInput[]) {
-  const timelines = tasks.filter((task) => task.kind === "TIMELINE" && task.offsetMs != null);
-  const conflicts: Array<{ executorSlotKey: string; firstOrderIndex: number; secondOrderIndex: number }> = [];
-  for (let firstIndex = 0; firstIndex < timelines.length; firstIndex += 1) {
-    const first = timelines[firstIndex];
-    if (!first) continue;
-    for (let secondIndex = firstIndex + 1; secondIndex < timelines.length; secondIndex += 1) {
-      const second = timelines[secondIndex];
-      if (!second || first.executorSlotKey !== second.executorSlotKey) continue;
-      const firstStart = first.offsetMs ?? 0;
-      const secondStart = second.offsetMs ?? 0;
-      const firstEnd = firstStart + (first.windowMs ?? 1);
-      const secondEnd = secondStart + (second.windowMs ?? 1);
-      if (firstStart < secondEnd && secondStart < firstEnd) {
-        conflicts.push({
-          executorSlotKey: first.executorSlotKey,
-          firstOrderIndex: first.orderIndex,
-          secondOrderIndex: second.orderIndex,
-        });
-      }
-    }
-  }
-  return conflicts;
-}
-
 function serializeStrategyTask(task: StrategyVersionWithContent["tasks"][number]) {
   return {
     id: task.id.toString(),
@@ -1318,33 +1268,41 @@ function serializeStrategyTask(task: StrategyVersionWithContent["tasks"][number]
   };
 }
 
-function serializeSnapshotTask(task: {
-  id: bigint;
-  taskTypeId: number;
-  taskType: { code: string; label: string };
-  taskTypeLabelSnapshot: string;
-  encounterSpellNameSnapshot: string | null;
-  playerSpellNameSnapshot: string | null;
-  kind: string;
-  orderIndex: number;
-  label: string;
-  encounterSpellId: number | null;
-  encounterSpell: { name: string } | null;
-  playerSpellId: number | null;
-  playerSpell: { name: string } | null;
-  executorSlotKey: string;
-  targetSlotKey: string | null;
-  fallbackSlotKey: string | null;
-  notes: string | null;
-  repeatRule: string | null;
-  offsetMs: number | null;
-  windowMs: number | null;
-  phaseLabel: string | null;
-  occurrence: number | null;
-  reminderMs: number | null;
-}) {
+function serializeSnapshotTask(
+  task: {
+    id: bigint;
+    taskTypeId: number;
+    taskType: { code: string; label: string };
+    taskTypeLabelSnapshot: string;
+    encounterSpellNameSnapshot: string | null;
+    playerSpellNameSnapshot: string | null;
+    kind: string;
+    orderIndex: number;
+    label: string;
+    encounterSpellId: number | null;
+    encounterSpell: { name: string } | null;
+    playerSpellId: number | null;
+    playerSpell: { name: string } | null;
+    executorSlotKey: string | null;
+    executorSignupId: bigint | null;
+    fallbackSignupId: bigint | null;
+    targetSignupId: bigint | null;
+    peopleSnapshot: Prisma.JsonValue;
+    targetSlotKey: string | null;
+    fallbackSlotKey: string | null;
+    notes: string | null;
+    repeatRule: string | null;
+    offsetMs: number | null;
+    windowMs: number | null;
+    phaseLabel: string | null;
+    occurrence: number | null;
+    reminderMs: number | null;
+  },
+  locked: boolean,
+) {
   return {
     id: task.id.toString(),
+    ...serializeTacticalPeople(task, locked),
     taskTypeId: task.taskTypeId,
     taskTypeCode: task.taskType.code,
     taskTypeLabel: task.taskTypeLabelSnapshot,
@@ -1372,6 +1330,7 @@ function serializeVersion(version: StrategyVersionWithContent) {
   return {
     id: String(version.id),
     strategyId: String(version.strategyId),
+    contentMode: version.contentMode,
     strategyName: version.strategy.name,
     bossId: String(version.strategy.boss.id),
     bossName: version.strategy.boss.name,

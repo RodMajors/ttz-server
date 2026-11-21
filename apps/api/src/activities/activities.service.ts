@@ -1,8 +1,10 @@
 import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import type { CreateActivityInput, SignupInput, UpdateActivityInput } from "@ttz/contracts";
+import type { Prisma } from "@ttz/database";
 import type { AuthUser } from "../auth/auth.types";
 import { PrismaService } from "../database/prisma.service";
 import { characterInclude, serializeCharacter } from "../members/characters.service";
+import { serializeTacticalPeople, validateActivityTactics } from "../raid-progress/activity-tactics";
 import {
   activityCodeToStatus,
   attendanceStatusToCode,
@@ -161,6 +163,7 @@ export class ActivitiesService {
                     id: target.strategySnapshot.id.toString(),
                     status: target.strategySnapshot.status,
                     revision: target.strategySnapshot.revision,
+                    assignmentMode: target.strategySnapshot.assignmentMode,
                     lockedAt: target.strategySnapshot.lockedAt?.toISOString() ?? null,
                     slots: target.strategySnapshot.slots.map((slot) => ({
                       slotKey: slot.slotKey,
@@ -177,9 +180,13 @@ export class ActivitiesService {
                     })),
                   }
                 : null,
-              tasks: target.strategySnapshot?.tasks.map(serializeSnapshotTaskForActivity) ?? [],
+              tasks:
+                target.strategySnapshot?.tasks.map((task) =>
+                  serializeSnapshotTaskForActivity(task, target.strategySnapshot?.status === "LOCKED"),
+                ) ?? [],
               blocks:
                 target.strategySnapshot?.blocks.map((block) => ({
+                  id: block.id.toString(),
                   type: block.type,
                   title: block.title,
                   orderIndex: block.orderIndex,
@@ -245,8 +252,9 @@ export class ActivitiesService {
                       create: {
                         sourceVersionId: target.versionId,
                         createdBy: user.id,
+                        assignmentMode: "DIRECT",
                         blocks: { create: target.blocks },
-                        slots: { create: [...target.slots, ...buildTeamSeatSlots()] },
+                        slots: { create: buildTeamSeatSlots() },
                         tasks: { create: target.tasks },
                       },
                     },
@@ -275,7 +283,6 @@ export class ActivitiesService {
           include: {
             strategy: { select: { bossId: true } },
             blocks: { orderBy: { orderIndex: "asc" } },
-            slots: { orderBy: { orderIndex: "asc" } },
             tasks: {
               include: { taskType: true, encounterSpell: true, playerSpell: true },
               orderBy: [{ kind: "asc" }, { orderIndex: "asc" }],
@@ -304,16 +311,7 @@ export class ActivitiesService {
             title: block.title,
             orderIndex: block.orderIndex,
             schemaVersion: block.schemaVersion,
-            config: block.config ?? undefined,
             markdown: block.markdown,
-          })) ?? [],
-        slots:
-          version?.slots.map((slot) => ({
-            slotKey: slot.slotKey,
-            label: slot.label,
-            roleConstraint: slot.roleConstraint,
-            isRequired: slot.isRequired,
-            orderIndex: slot.orderIndex,
           })) ?? [],
         tasks:
           version?.tasks.map((task) => ({
@@ -327,16 +325,7 @@ export class ActivitiesService {
             encounterSpellNameSnapshot: task.encounterSpell?.name ?? null,
             playerSpellId: task.playerSpellId,
             playerSpellNameSnapshot: task.playerSpell?.name ?? null,
-            executorSlotKey: task.executorSlotKey,
-            targetSlotKey: task.targetSlotKey,
-            fallbackSlotKey: task.fallbackSlotKey,
             notes: task.notes,
-            repeatRule: task.repeatRule,
-            offsetMs: task.offsetMs,
-            windowMs: task.windowMs,
-            phaseLabel: task.phaseLabel,
-            occurrence: task.occurrence,
-            reminderMs: task.reminderMs,
           })) ?? [],
       };
     });
@@ -705,6 +694,16 @@ export class ActivitiesService {
         });
       }
       for (const snapshot of snapshots) {
+        if (snapshot.assignmentMode === "DIRECT") {
+          const freeze = await validateActivityTactics(transaction, id, snapshot.tasks, true);
+          for (const task of snapshot.tasks) {
+            await transaction.activityStrategySnapshotTask.update({
+              where: { id: task.id },
+              data: { peopleSnapshot: freeze(task) },
+            });
+          }
+          continue;
+        }
         const bySlotKey = new Map(snapshot.slots.map((slot) => [slot.slotKey, slot]));
         for (const task of snapshot.tasks ?? []) {
           const requiredKeys = [task.executorSlotKey, task.fallbackSlotKey, task.targetSlotKey].filter(
@@ -717,7 +716,7 @@ export class ActivitiesService {
               message: `任务“${task.label}”的槽位 ${unboundKey} 尚未绑定有效报名，无法锁定名单`,
             });
           }
-          const executor = bySlotKey.get(task.executorSlotKey)?.signup;
+          const executor = task.executorSlotKey ? bySlotKey.get(task.executorSlotKey)?.signup : undefined;
           if (
             executor &&
             task.playerSpell?.classId != null &&
@@ -1025,31 +1024,39 @@ function buildTeamSeatSlots() {
   ).flat();
 }
 
-function serializeSnapshotTaskForActivity(task: {
-  id: bigint;
-  taskTypeId: number;
-  taskTypeLabelSnapshot: string;
-  taskType: { code: string };
-  kind: string;
-  orderIndex: number;
-  label: string;
-  encounterSpellId: number | null;
-  encounterSpellNameSnapshot: string | null;
-  playerSpellId: number | null;
-  playerSpellNameSnapshot: string | null;
-  executorSlotKey: string;
-  targetSlotKey: string | null;
-  fallbackSlotKey: string | null;
-  notes: string | null;
-  repeatRule: string | null;
-  offsetMs: number | null;
-  windowMs: number | null;
-  phaseLabel: string | null;
-  occurrence: number | null;
-  reminderMs: number | null;
-}) {
+function serializeSnapshotTaskForActivity(
+  task: {
+    id: bigint;
+    taskTypeId: number;
+    taskTypeLabelSnapshot: string;
+    taskType: { code: string };
+    kind: string;
+    orderIndex: number;
+    label: string;
+    encounterSpellId: number | null;
+    encounterSpellNameSnapshot: string | null;
+    playerSpellId: number | null;
+    playerSpellNameSnapshot: string | null;
+    executorSlotKey: string | null;
+    executorSignupId: bigint | null;
+    fallbackSignupId: bigint | null;
+    targetSignupId: bigint | null;
+    peopleSnapshot: Prisma.JsonValue;
+    targetSlotKey: string | null;
+    fallbackSlotKey: string | null;
+    notes: string | null;
+    repeatRule: string | null;
+    offsetMs: number | null;
+    windowMs: number | null;
+    phaseLabel: string | null;
+    occurrence: number | null;
+    reminderMs: number | null;
+  },
+  locked: boolean,
+) {
   return {
     id: task.id.toString(),
+    ...serializeTacticalPeople(task, locked),
     taskTypeId: task.taskTypeId,
     taskTypeCode: task.taskType.code,
     taskTypeLabel: task.taskTypeLabelSnapshot,

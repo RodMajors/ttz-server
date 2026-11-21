@@ -314,6 +314,10 @@ model ActivitySignup {
   attendanceRecords                        AttendanceRecord[]
   strategySlots                            ActivityStrategySnapshotSlot[]
 
+  strategyTasksAsExecutor                  ActivityStrategySnapshotTask[] @relation("StrategyTaskExecutor")
+  strategyTasksAsFallback                  ActivityStrategySnapshotTask[] @relation("StrategyTaskFallback")
+  strategyTasksAsTarget                    ActivityStrategySnapshotTask[] @relation("StrategyTaskTarget")
+
   @@unique([activityId, userId], map: "uk_activity_user")
   @@index([characterId], map: "fk_signup_character")
   @@index([userId], map: "fk_signup_user")
@@ -498,6 +502,7 @@ model BossStrategyVersion {
   strategyId      BigInt                     @map("strategy_id") @db.UnsignedBigInt
   versionNo       Int                        @map("version_no") @db.UnsignedInt
   status          String                     @default("DRAFT") @db.VarChar(16)
+  contentMode     String                     @default("LEGACY") @map("content_mode") @db.VarChar(16)
   changeSummary   String?                    @map("change_summary") @db.VarChar(500)
   createdBy       BigInt                     @map("created_by") @db.UnsignedBigInt
   publishedBy     BigInt?                    @map("published_by") @db.UnsignedBigInt
@@ -592,7 +597,7 @@ model BossStrategyTask {
   label              String              @db.VarChar(128)
   encounterSpellId   Int?                @map("encounter_spell_id")
   playerSpellId      Int?                @map("player_spell_id")
-  executorSlotKey    String              @map("executor_slot_key") @db.VarChar(64)
+  executorSlotKey    String?              @map("executor_slot_key") @db.VarChar(64)
   targetSlotKey      String?             @map("target_slot_key") @db.VarChar(64)
   fallbackSlotKey    String?             @map("fallback_slot_key") @db.VarChar(64)
   notes              String?             @db.VarChar(1000)
@@ -627,9 +632,13 @@ model ActivityStrategySnapshotTask {
   encounterSpellNameSnapshot String?                    @map("encounter_spell_name_snapshot") @db.VarChar(128)
   playerSpellId              Int?                       @map("player_spell_id")
   playerSpellNameSnapshot    String?                    @map("player_spell_name_snapshot") @db.VarChar(128)
-  executorSlotKey            String                     @map("executor_slot_key") @db.VarChar(64)
+  executorSlotKey            String?                     @map("executor_slot_key") @db.VarChar(64)
   targetSlotKey              String?                    @map("target_slot_key") @db.VarChar(64)
   fallbackSlotKey            String?                    @map("fallback_slot_key") @db.VarChar(64)
+  executorSignupId           BigInt?                    @map("executor_signup_id") @db.UnsignedBigInt
+  fallbackSignupId           BigInt?                    @map("fallback_signup_id") @db.UnsignedBigInt
+  targetSignupId             BigInt?                    @map("target_signup_id") @db.UnsignedBigInt
+  peopleSnapshot             Json?                      @map("people_snapshot")
   notes                      String?                    @db.VarChar(1000)
   repeatRule                 String?                    @map("repeat_rule") @db.VarChar(64)
   offsetMs                   Int?                       @map("offset_ms") @db.UnsignedInt
@@ -642,6 +651,13 @@ model ActivityStrategySnapshotTask {
   encounterSpell             GameSpell?                 @relation("SnapshotEncounterSpell", fields: [encounterSpellId], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_activity_strategy_task_encounter_spell")
   playerSpell                GameSpell?                 @relation("SnapshotPlayerSpell", fields: [playerSpellId], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_activity_strategy_task_player_spell")
 
+  executorSignup             ActivitySignup?            @relation("StrategyTaskExecutor", fields: [executorSignupId], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_strategy_task_executor_signup")
+  fallbackSignup             ActivitySignup?            @relation("StrategyTaskFallback", fields: [fallbackSignupId], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_strategy_task_fallback_signup")
+  targetSignup               ActivitySignup?            @relation("StrategyTaskTarget", fields: [targetSignupId], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_strategy_task_target_signup")
+
+  @@index([executorSignupId], map: "idx_strategy_task_executor_signup")
+  @@index([fallbackSignupId], map: "idx_strategy_task_fallback_signup")
+  @@index([targetSignupId], map: "idx_strategy_task_target_signup")
   @@index([snapshotId, kind, orderIndex], map: "idx_activity_strategy_task_order")
   @@index([taskTypeId], map: "idx_activity_strategy_task_type")
   @@index([sourceTaskId], map: "idx_activity_strategy_task_source")
@@ -672,6 +688,7 @@ model ActivityStrategySnapshot {
   targetId        BigInt                          @unique(map: "uk_activity_strategy_snapshot_target") @map("target_id") @db.UnsignedBigInt
   sourceVersionId BigInt?                         @map("source_version_id") @db.UnsignedBigInt
   status          String                          @default("EDITING") @db.VarChar(16)
+  assignmentMode  String                          @default("LEGACY") @map("assignment_mode") @db.VarChar(16)
   revision        Int                             @default(1) @db.UnsignedInt
   createdBy       BigInt                          @map("created_by") @db.UnsignedBigInt
   lockedBy        BigInt?                         @map("locked_by") @db.UnsignedBigInt

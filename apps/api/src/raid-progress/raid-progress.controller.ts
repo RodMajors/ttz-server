@@ -4,10 +4,11 @@ import {
   activityStrategyPositioningSaveSchema,
   bossStrategyCreateSchema,
   bossStrategyUpdateSchema,
-  bossStrategyVersionSaveSchema,
   gameSpellInputSchema,
   gameSpellStatusSchema,
   idSchema,
+  strategyActivitySaveSchema,
+  strategyPresetSaveSchema,
   strategyTaskTypeInputSchema,
 } from "@ttz/contracts";
 import { CurrentUser, MinPrivilege, Public } from "../auth/auth.decorators";
@@ -57,7 +58,6 @@ export class RaidProgressController {
   }
 
   @Get("task-catalog")
-  @MinPrivilege(1)
   taskCatalog() {
     return this.service.getStrategyTaskCatalog();
   }
@@ -120,6 +120,18 @@ export class RaidProgressController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.service.saveSnapshotPositioning(BigInt(activityId), BigInt(snapshotId), body, user);
+  }
+
+  @Put("activities/:activityId/snapshots/:snapshotId/tactics")
+  saveActivityTactics(
+    @Param("activityId", new ZodValidationPipe(idSchema)) activityId: string,
+    @Param("snapshotId", new ZodValidationPipe(idSchema)) snapshotId: string,
+    @Body(new ZodValidationPipe(strategyActivitySaveSchema)) body: Parameters<
+      RaidProgressService["saveActivityTactics"]
+    >[2],
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.service.saveActivityTactics(BigInt(activityId), BigInt(snapshotId), body, user);
   }
 
   @Put("activities/:activityId/snapshots/:snapshotId/assignments")
@@ -185,11 +197,9 @@ export class RaidProgressController {
   @MinPrivilege(1)
   saveVersion(
     @Param("id", new ZodValidationPipe(idSchema)) id: string,
-    @Body(new ZodValidationPipe(bossStrategyVersionSaveSchema)) body: Parameters<
-      RaidProgressService["saveDraftVersion"]
-    >[1],
+    @Body(new ZodValidationPipe(strategyPresetSaveSchema)) body: Parameters<RaidProgressService["savePreset"]>[1],
   ) {
-    return this.service.saveDraftVersion(BigInt(id), body);
+    return this.service.savePreset(BigInt(id), body);
   }
 
   @Post("strategy-versions/:id/publish")

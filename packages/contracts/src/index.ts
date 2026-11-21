@@ -304,6 +304,7 @@ export const raidActivityDetailSchema = z.object({
           id: idSchema,
           status: z.enum(["EDITING", "LOCKED"]),
           revision: z.number().int().min(1),
+          assignmentMode: z.enum(["LEGACY", "DIRECT"]).default("LEGACY"),
           lockedAt: isoDateTimeSchema.nullable(),
           slots: z.array(
             z.object({
@@ -325,6 +326,7 @@ export const raidActivityDetailSchema = z.object({
       tasks: z.array(z.lazy(() => strategyTaskDtoSchema)),
       blocks: z.array(
         z.object({
+          id: idSchema.optional(),
           type: z.string(),
           title: z.string(),
           orderIndex: z.number().int(),
@@ -830,6 +832,7 @@ export const createStrategyInputSchema = bossStrategyCreateSchema;
 export const strategyVersionDtoSchema = z.object({
   id: idSchema,
   strategyId: idSchema,
+  contentMode: z.enum(["LEGACY", "REQUIREMENTS"]).default("LEGACY"),
   versionNo: z.number().int(),
   status: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]),
   changeSummary: z.string().nullable(),
@@ -905,7 +908,77 @@ export const strategyTaskListSchema = z.array(strategyTaskInputSchema).superRefi
   }
 });
 export type StrategyTaskInput = z.infer<typeof strategyTaskInputSchema>;
+// Presets describe requirements; only an individual activity may assign people and times.
+export const strategyRequirementSchema = strategyTaskInputSchema
+  .pick({
+    taskTypeId: true,
+    kind: true,
+    orderIndex: true,
+    label: true,
+    encounterSpellId: true,
+    playerSpellId: true,
+    notes: true,
+  })
+  .strict();
+export const strategyRequirementBlockSchema = z.strictObject({
+  type: z.enum(["POSITIONING", "RAID_GROUPS", "SEQUENCE", "TIMELINE", "NOTES"]),
+  title: z.string().trim().min(1).max(128),
+  orderIndex: z.number().int().min(0).max(1000),
+  markdown: z.string().max(200_000).nullable().optional(),
+});
+export const strategyPresetSaveSchema = z.strictObject({
+  changeSummary: z.string().trim().max(500).nullable().optional(),
+  blocks: z.array(strategyRequirementBlockSchema).max(50),
+  tasks: z.array(strategyRequirementSchema).max(200),
+});
+export type StrategyPresetSaveInput = z.infer<typeof strategyPresetSaveSchema>;
+
+export const strategyActivityTaskSchema = strategyRequirementSchema.extend({
+  id: idSchema.optional(),
+  executorSignupId: idSchema.nullable(),
+  fallbackSignupId: idSchema.nullable(),
+  targetSignupId: idSchema.nullable(),
+  offsetMs: strategyTaskInputSchema.shape.offsetMs,
+  windowMs: strategyTaskInputSchema.shape.windowMs,
+});
+export const strategyActivitySaveSchema = z.strictObject({
+  revision: z.number().int().positive(),
+  tasks: z.array(strategyActivityTaskSchema).max(200),
+  notes: z
+    .array(
+      z.strictObject({
+        id: idSchema.optional(),
+        title: z.string().trim().min(1).max(128),
+        markdown: z.string().max(200_000),
+      }),
+    )
+    .max(50),
+});
+export type StrategyActivitySaveInput = z.infer<typeof strategyActivitySaveSchema>;
+
+export const strategyTaskPersonSchema = z.object({
+  userId: idSchema,
+  memberName: z.string(),
+  characterId: idSchema,
+  characterName: z.string(),
+  realm: z.string(),
+  classId: z.number().int(),
+  className: z.string().nullable(),
+  specId: z.number().int().nullable(),
+  specName: z.string().nullable(),
+});
+export const strategyTaskPeopleSchema = z.object({
+  executor: strategyTaskPersonSchema.nullable(),
+  fallback: strategyTaskPersonSchema.nullable(),
+  target: strategyTaskPersonSchema.nullable(),
+});
+
 export const strategyTaskDtoSchema = strategyTaskInputSchema.extend({
+  executorSlotKey: z.string().nullable(),
+  executorSignupId: idSchema.nullable().optional(),
+  fallbackSignupId: idSchema.nullable().optional(),
+  targetSignupId: idSchema.nullable().optional(),
+  people: strategyTaskPeopleSchema.nullable().optional(),
   id: idSchema,
   taskTypeCode: z.string(),
   taskTypeLabel: z.string(),
@@ -1011,38 +1084,6 @@ export const gameSpellSchema = z.object({
 });
 export const gameSpellStatusSchema = z.object({ isActive: z.boolean() });
 
-export const bossStrategyVersionSaveSchema = z.object({
-  changeSummary: z.string().trim().max(500).nullable().optional(),
-  slots: z
-    .array(
-      z.object({
-        slotKey: z
-          .string()
-          .trim()
-          .min(1)
-          .max(64)
-          .refine((key) => !key.startsWith("__team_"), "槽位键不能使用团队席位保留前缀"),
-        label: z.string().trim().min(1).max(128),
-        roleConstraint: z.number().int().min(1).max(4).nullable().optional(),
-        isRequired: z.boolean(),
-        orderIndex: z.number().int().min(0).max(1000),
-      }),
-    )
-    .max(200)
-    .refine((slots) => new Set(slots.map((slot) => slot.slotKey)).size === slots.length, "槽位键不能重复"),
-  tasks: strategyTaskListSchema.default([]),
-  blocks: z
-    .array(
-      z.object({
-        type: z.enum(["POSITIONING", "RAID_GROUPS", "SEQUENCE", "TIMELINE", "NOTES"]),
-        title: z.string().trim().min(1).max(128),
-        orderIndex: z.number().int().min(0).max(1000),
-        config: z.record(z.string(), z.unknown()).nullable().optional(),
-        markdown: z.string().max(200_000).nullable().optional(),
-      }),
-    )
-    .max(50),
-});
 export const raidTargetCreateSchema = z.object({
   bossId: idSchema,
   orderIndex: z.number().int().min(0).max(100),
