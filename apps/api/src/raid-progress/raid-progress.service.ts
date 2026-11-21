@@ -638,12 +638,8 @@ export class RaidProgressService {
       if (!changed.count)
         throw new ConflictException({ code: "STRATEGY_VERSION_IMMUTABLE", message: "只能编辑启用方案的草稿" });
       const blocks = input.items.filter(
-        (
-          item,
-        ): item is Extract<
-          StrategyPresetSaveInput["items"][number],
-          { type: "POSITIONING" | "RAID_GROUPS" | "NOTES" }
-        > => item.type === "POSITIONING" || item.type === "RAID_GROUPS" || item.type === "NOTES",
+        (item): item is Extract<StrategyPresetSaveInput["items"][number], { type: "POSITIONING" | "NOTES" }> =>
+          item.type === "POSITIONING" || item.type === "NOTES",
       );
       const tasks = input.items
         .filter(
@@ -754,14 +750,23 @@ export class RaidProgressService {
       throw new ForbiddenException({ code: "ACTIVITY_NOT_OWNED", message: "只能编辑自己负责活动的战术快照" });
     if (activity.status >= 2 || activity.rosterLockedAt)
       throw new ConflictException({ code: "ACTIVITY_ROSTER_LOCKED", message: "活动名单或站位快照已锁定" });
-    const snapshot = await this.prisma.activityStrategySnapshot.findFirst({
-      where: { id: snapshotId, target: { activityId } },
-      select: { id: true, status: true, revision: true, slots: { select: { slotKey: true } } },
-    });
+    const [snapshot, teamLayout] = await Promise.all([
+      this.prisma.activityStrategySnapshot.findFirst({
+        where: { id: snapshotId, target: { activityId } },
+        select: { id: true, status: true, revision: true, slots: { select: { slotKey: true } } },
+      }),
+      this.prisma.activityTeamLayout.findUnique({
+        where: { activityId },
+        select: { seats: { select: { groupNo: true, positionNo: true } } },
+      }),
+    ]);
     if (!snapshot) throw new NotFoundException({ code: "STRATEGY_SNAPSHOT_NOT_FOUND", message: "战术快照不存在" });
     if (snapshot.status !== "EDITING")
       throw new ConflictException({ code: "STRATEGY_SNAPSHOT_LOCKED", message: "战术快照已锁定" });
-    const availableSlotKeys = new Set(snapshot.slots.map((slot) => slot.slotKey));
+    const availableSlotKeys = new Set([
+      ...snapshot.slots.map((slot) => slot.slotKey),
+      ...(teamLayout?.seats ?? []).map((seat) => `__team_g${seat.groupNo}_p${seat.positionNo}`),
+    ]);
     if (input.canvas.shapes.some((shape) => shape.type === "slot" && !availableSlotKeys.has(shape.slotKey)))
       throw new ConflictException({ code: "POSITIONING_SLOT_INVALID", message: "站位图中包含当前快照不存在的槽位" });
     return this.prisma.$transaction(async (tx) => {
@@ -1396,10 +1401,10 @@ function serializeVersion(version: StrategyVersionWithContent) {
 }
 
 function serializePresetItems(version: StrategyVersionWithContent) {
-  const textTypes = new Set(["POSITIONING", "RAID_GROUPS", "NOTES"]);
+  const textTypes = new Set(["POSITIONING", "NOTES"]);
   return [
     ...version.blocks.map((block) => ({
-      type: (textTypes.has(block.type) ? block.type : "NOTES") as "POSITIONING" | "RAID_GROUPS" | "NOTES",
+      type: (textTypes.has(block.type) ? block.type : "NOTES") as "POSITIONING" | "NOTES",
       title: block.title,
       orderIndex: block.orderIndex,
       markdown: block.markdown,

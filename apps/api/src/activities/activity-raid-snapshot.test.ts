@@ -111,17 +111,12 @@ describe("raid activity strategy snapshots", () => {
                 }),
               ],
             },
-            slots: {
-              create: expect.arrayContaining([
-                expect.objectContaining({ slotKey: "__team_g1_p1", groupNo: 1, positionNo: 1 }),
-                expect.objectContaining({ slotKey: "__team_g8_p5", groupNo: 8, positionNo: 5 }),
-              ]),
-            },
           },
         },
       });
       const snapshot = data.raidTargets.create[0].strategySnapshot.create;
-      expect(snapshot.slots.create).toHaveLength(40);
+      expect(snapshot).not.toHaveProperty("slots");
+      expect(data.teamLayout.create.seats.create).toHaveLength(40);
       expect(snapshot.blocks.create[0]).not.toHaveProperty("config");
       expect(snapshot.tasks.create[0]).not.toHaveProperty("executorSlotKey");
       expect(snapshot.tasks.create[0]).not.toHaveProperty("offsetMs");

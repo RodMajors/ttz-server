@@ -186,6 +186,52 @@ export const activitySignupSchema = z.object({
 });
 export type ActivitySignup = z.infer<typeof activitySignupSchema>;
 
+export const activityTeamSeatSchema = z.object({
+  groupNo: z.number().int().min(1).max(8),
+  positionNo: z.number().int().min(1).max(5),
+  signupId: idSchema.nullable(),
+  userName: z.string().nullable(),
+  characterName: z.string().nullable(),
+  realmName: z.string().nullable(),
+  classId: z.number().int().nullable(),
+  className: z.string().nullable(),
+  specName: z.string().nullable(),
+});
+export const activityTeamLayoutSchema = z.object({
+  id: idSchema,
+  revision: z.number().int().min(1),
+  groupCount: z.number().int().min(1).max(8),
+  seatsPerGroup: z.number().int().min(1).max(5),
+  status: z.enum(["EDITING", "LOCKED"]),
+  needsReview: z.boolean(),
+  lockedAt: isoDateTimeSchema.nullable(),
+  seats: z.array(activityTeamSeatSchema),
+});
+export const activityTeamLayoutSaveSchema = z
+  .strictObject({
+    revision: z.number().int().min(1),
+    assignments: z
+      .array(
+        z.strictObject({
+          groupNo: z.number().int().min(1).max(8),
+          positionNo: z.number().int().min(1).max(5),
+          signupId: idSchema,
+        }),
+      )
+      .max(40),
+  })
+  .superRefine((value, context) => {
+    const positions = value.assignments.map(({ groupNo, positionNo }) => `${groupNo}:${positionNo}`);
+    if (new Set(positions).size !== positions.length) {
+      context.addIssue({ code: "custom", path: ["assignments"], message: "团队位置不能重复" });
+    }
+    const signupIds = value.assignments.map(({ signupId }) => signupId);
+    if (new Set(signupIds).size !== signupIds.length) {
+      context.addIssue({ code: "custom", path: ["assignments"], message: "同一报名不能重复占据多个团队位置" });
+    }
+  });
+export type ActivityTeamLayoutSaveInput = z.infer<typeof activityTeamLayoutSaveSchema>;
+
 export const activityDetailSchema = z.object({
   id: idSchema,
   name: z.string(),
@@ -211,6 +257,7 @@ export const activityDetailSchema = z.object({
   canChangeMySignup: z.boolean(),
   mySignup: activitySignupSchema.nullable(),
   signups: z.array(activitySignupSchema),
+  teamLayout: activityTeamLayoutSchema.nullable(),
   raid: z.lazy(() => raidActivityDetailSchema).nullable(),
 });
 export type ActivityDetail = z.infer<typeof activityDetailSchema>;
@@ -836,14 +883,14 @@ const strategyPresetItemBaseSchema = {
 };
 
 /**
- * A strategy preset is one ordered list of five peer content types. The database
+ * A strategy preset is one ordered list of four peer content types. The database
  * still stores text blocks and executable task rows separately for compatibility,
  * but this is the public model used by the editor and API.
  */
 export const strategyPresetItemSchema = z.union([
   z.strictObject({
     ...strategyPresetItemBaseSchema,
-    type: z.enum(["POSITIONING", "RAID_GROUPS", "NOTES"]),
+    type: z.enum(["POSITIONING", "NOTES"]),
   }),
   z.strictObject({
     ...strategyPresetItemBaseSchema,

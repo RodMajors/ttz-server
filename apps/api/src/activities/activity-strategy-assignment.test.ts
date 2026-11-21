@@ -158,6 +158,13 @@ describe("activity roster snapshot locking", () => {
             updateMany: snapshotLock,
           },
           activityStrategySnapshotSlot: { update: slotUpdate },
+          activityTeamLayout: {
+            findUnique: vi
+              .fn()
+              .mockResolvedValue({ id: 501n, status: "EDITING", seats: [{ id: 601n, signup: assignedSlot.signup }] }),
+            update: vi.fn().mockResolvedValue({}),
+          },
+          activityTeamSeat: { update: vi.fn().mockResolvedValue({}) },
         }),
       ),
     } as unknown as PrismaService;
@@ -226,6 +233,9 @@ describe("activity roster snapshot locking", () => {
             updateMany: lockSnapshots,
           },
           activityStrategySnapshotSlot: { update: vi.fn(), updateMany: vi.fn() },
+          activityTeamLayout: {
+            findUnique: vi.fn().mockResolvedValue({ id: 501n, status: "EDITING", seats: [] }),
+          },
         }),
       ),
     } as unknown as PrismaService;
@@ -259,6 +269,9 @@ describe("activity roster snapshot locking", () => {
           .fn()
           .mockResolvedValue({ id: 20n, status: "EDITING", revision: 4, slots: [{ slotKey: "main-tank" }] }),
       },
+      activityTeamLayout: {
+        findUnique: vi.fn().mockResolvedValue({ seats: [{ groupNo: 1, positionNo: 1 }] }),
+      },
       $transaction: vi.fn(async (callback: (tx: unknown) => unknown) =>
         callback({
           activity: { updateMany: activityUpdate },
@@ -273,7 +286,17 @@ describe("activity roster snapshot locking", () => {
       height: 700,
       background: "CIRCLE_ARENA" as const,
       imageUrl: null,
-      shapes: [{ id: "tank", type: "slot" as const, x: 400, y: 300, slotKey: "main-tank", color: "blue" as const }],
+      shapes: [
+        { id: "tank", type: "slot" as const, x: 400, y: 300, slotKey: "main-tank", color: "blue" as const },
+        {
+          id: "group-seat",
+          type: "slot" as const,
+          x: 450,
+          y: 300,
+          slotKey: "__team_g1_p1",
+          color: "green" as const,
+        },
+      ],
     };
 
     await expect(

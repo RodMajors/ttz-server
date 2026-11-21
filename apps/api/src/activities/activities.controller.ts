@@ -1,5 +1,7 @@
 import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Put, Query } from "@nestjs/common";
 import {
+  type ActivityTeamLayoutSaveInput,
+  activityTeamLayoutSaveSchema,
   type CreateActivityInput,
   createActivitySchema,
   idSchema,
@@ -105,6 +107,15 @@ export class ActivitiesController {
   @Post(":id/roster/unlock")
   unlockRoster(@CurrentUser() user: AuthUser, @Param("id", new ZodValidationPipe(idSchema)) id: string) {
     return this.activities.unlockRoster(BigInt(id), user);
+  }
+
+  @Put(":id/team-layout")
+  saveTeamLayout(
+    @CurrentUser() user: AuthUser,
+    @Param("id", new ZodValidationPipe(idSchema)) id: string,
+    @Body(new ZodValidationPipe(activityTeamLayoutSaveSchema)) body: ActivityTeamLayoutSaveInput,
+  ) {
+    return this.activities.saveTeamLayout(BigInt(id), body, user);
   }
 
   @Get(":id/roster")

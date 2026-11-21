@@ -1,5 +1,10 @@
 import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import type { CreateActivityInput, SignupInput, UpdateActivityInput } from "@ttz/contracts";
+import type {
+  ActivityTeamLayoutSaveInput,
+  CreateActivityInput,
+  SignupInput,
+  UpdateActivityInput,
+} from "@ttz/contracts";
 import type { Prisma } from "@ttz/database";
 import type { AuthUser } from "../auth/auth.types";
 import { PrismaService } from "../database/prisma.service";
@@ -80,6 +85,14 @@ export class ActivitiesService {
           orderBy: [{ groupNo: "asc" }, { orderIndex: "asc" }],
         },
         activity_raid_ext: { include: { raids: true } },
+        teamLayout: {
+          include: {
+            seats: {
+              orderBy: [{ groupNo: "asc" }, { positionNo: "asc" }],
+              include: { signup: { include: { user: true, character: { include: characterInclude }, specs: true } } },
+            },
+          },
+        },
         raidTargets: {
           orderBy: { orderIndex: "asc" },
           include: {
@@ -143,6 +156,7 @@ export class ActivitiesService {
       canChangeMySignup,
       mySignup: mySignup ? serializeSignup(mySignup, canManage) : null,
       signups: activity.signups.map((signup) => serializeSignup(signup, canManage)),
+      teamLayout: activity.teamLayout ? serializeTeamLayout(activity.teamLayout) : null,
       raid: activity.activity_raid_ext
         ? {
             progressPlanId: activity.activity_raid_ext.progress_plan_id?.toString() ?? "",
@@ -232,6 +246,13 @@ export class ActivitiesService {
           meleeSlots: input.meleeSlots,
           rangedSlots: input.rangedSlots,
           attendanceEnabled: (input.attendanceEnabled ?? input.type === "raid_progress") ? 1 : 0,
+          teamLayout: {
+            create: {
+              groupCount: 8,
+              seatsPerGroup: 5,
+              seats: { create: buildActivityTeamSeatRows() },
+            },
+          },
           ...(raidPlan && raid
             ? {
                 activity_raid_ext: {
@@ -254,7 +275,6 @@ export class ActivitiesService {
                         createdBy: user.id,
                         assignmentMode: "DIRECT",
                         blocks: { create: target.blocks },
-                        slots: { create: buildTeamSeatSlots() },
                         tasks: { create: target.tasks },
                       },
                     },
@@ -659,6 +679,94 @@ export class ActivitiesService {
     });
   }
 
+  async saveTeamLayout(activityId: bigint, input: ActivityTeamLayoutSaveInput, editor: AuthUser) {
+    const activity = await this.requireManageable(activityId, editor);
+    if (activity.status >= 2 || activity.rosterLockedAt)
+      throw new ConflictException({ code: "ACTIVITY_ROSTER_LOCKED", message: "活动名单已锁定或活动已结束" });
+
+    const layout = await this.prisma.activityTeamLayout.findUnique({
+      where: { activityId },
+      include: { seats: { select: { groupNo: true, positionNo: true } } },
+    });
+    if (!layout) throw new NotFoundException({ code: "ACTIVITY_TEAM_LAYOUT_NOT_FOUND", message: "活动团队框架不存在" });
+    if (layout.status !== "EDITING")
+      throw new ConflictException({ code: "ACTIVITY_TEAM_LAYOUT_LOCKED", message: "团队框架已锁定" });
+    if (
+      layout.groupCount !== 8 ||
+      layout.seatsPerGroup !== 5 ||
+      layout.seats.length !== layout.groupCount * layout.seatsPerGroup
+    ) {
+      throw new ConflictException({
+        code: "ACTIVITY_TEAM_LAYOUT_INVALID",
+        message: "活动团队框架未初始化，请联系管理员",
+      });
+    }
+    if (
+      input.assignments.some((entry) => entry.groupNo > layout.groupCount || entry.positionNo > layout.seatsPerGroup)
+    ) {
+      throw new ConflictException({ code: "ACTIVITY_TEAM_POSITION_INVALID", message: "团队位置无效，请刷新后重试" });
+    }
+
+    const signupIds = input.assignments.map((entry) => BigInt(entry.signupId));
+    const validSignups = signupIds.length
+      ? await this.prisma.activitySignup.findMany({
+          where: {
+            id: { in: signupIds },
+            activityId,
+            status: { in: [signupStatusToCode.CONFIRMED, signupStatusToCode.BENCH] },
+          },
+          select: { id: true },
+        })
+      : [];
+    if (validSignups.length !== signupIds.length)
+      throw new ConflictException({ code: "STRATEGY_SIGNUP_INVALID", message: "仅可分配已确认或替补的本场报名" });
+
+    return this.prisma.$transaction(async (tx) => {
+      const activityUpdated = await tx.activity.updateMany({
+        where: { id: activityId, version: activity.version, rosterLockedAt: null, status: { lt: 2 } },
+        data: { version: { increment: 1 } },
+      });
+      if (!activityUpdated.count) throw versionConflict();
+
+      const layoutUpdated = await tx.activityTeamLayout.updateMany({
+        where: { id: layout.id, revision: input.revision, status: "EDITING" },
+        data: { revision: { increment: 1 }, needsReview: false },
+      });
+      if (!layoutUpdated.count)
+        throw new ConflictException({ code: "VERSION_CONFLICT", message: "团队框架已被其他人修改，请刷新后重试" });
+
+      const clearSeat = {
+        signupId: null,
+        assignedBy: null,
+        assignedAt: null,
+        userIdSnapshot: null,
+        userNameSnapshot: null,
+        characterIdSnapshot: null,
+        characterName: null,
+        realmName: null,
+        classIdSnapshot: null,
+        className: null,
+        specIdSnapshot: null,
+        specNameSnapshot: null,
+      };
+      await tx.activityTeamSeat.updateMany({ where: { layoutId: layout.id }, data: clearSeat });
+      const assignedAt = new Date();
+      for (const entry of input.assignments) {
+        await tx.activityTeamSeat.update({
+          where: {
+            layoutId_groupNo_positionNo: {
+              layoutId: layout.id,
+              groupNo: entry.groupNo,
+              positionNo: entry.positionNo,
+            },
+          },
+          data: { signupId: BigInt(entry.signupId), assignedBy: editor.id, assignedAt },
+        });
+      }
+      return { layoutId: layout.id.toString(), revision: input.revision + 1, updated: true };
+    });
+  }
+
   async lockRoster(id: bigint, user: AuthUser) {
     const activity = await this.requireManageable(id, user);
     if (activity.status >= 2)
@@ -681,6 +789,39 @@ export class ActivitiesService {
           tasks: { include: { playerSpell: true } },
         },
       });
+      const teamLayout = await transaction.activityTeamLayout.findUnique({
+        where: { activityId: id },
+        include: {
+          seats: {
+            where: { signupId: { not: null } },
+            include: { signup: { include: { user: true, character: { include: characterInclude }, specs: true } } },
+          },
+        },
+      });
+      if (!teamLayout)
+        throw new ConflictException({
+          code: "ACTIVITY_TEAM_LAYOUT_NOT_FOUND",
+          message: "活动团队框架不存在，无法锁定名单",
+        });
+      if (teamLayout.status !== "EDITING")
+        throw new ConflictException({ code: "ACTIVITY_TEAM_LAYOUT_LOCKED", message: "活动团队框架状态无效" });
+      if (teamLayout.needsReview)
+        throw new ConflictException({
+          code: "ACTIVITY_TEAM_LAYOUT_REVIEW_REQUIRED",
+          message: "旧活动的团队分组存在历史差异，请先核对并保存团队框架后再锁定名单",
+        });
+      const assignedTeamSeats = teamLayout.seats;
+      if (
+        assignedTeamSeats.some(
+          (seat) =>
+            !seat.signup || ![signupStatusToCode.CONFIRMED, signupStatusToCode.BENCH].includes(seat.signup.status),
+        )
+      ) {
+        throw new ConflictException({
+          code: "STRATEGY_SIGNUP_INVALID",
+          message: "存在已失效的团队分组人员绑定，请调整后再锁定名单",
+        });
+      }
       const assignedSlots = snapshots.flatMap((snapshot) => snapshot.slots);
       if (
         assignedSlots.some(
@@ -756,6 +897,31 @@ export class ActivitiesService {
           },
         });
       }
+      for (const seat of assignedTeamSeats) {
+        const signup = seat.signup;
+        if (!signup) continue;
+        await transaction.activityTeamSeat.update({
+          where: { id: seat.id },
+          data: {
+            userIdSnapshot: signup.userId,
+            userNameSnapshot: signup.user.guildNickname ?? signup.user.name ?? "TTZ 成员",
+            characterIdSnapshot: signup.character.id,
+            characterName: signup.character.name,
+            realmName: signup.character.serverName,
+            classIdSnapshot: signup.character.classId,
+            className:
+              signup.character.characterClass.name ??
+              signup.character.characterClass.en_name ??
+              `职业 ${signup.character.classId}`,
+            specIdSnapshot: signup.preferredSpecId,
+            specNameSnapshot: signup.specs?.name ?? null,
+          },
+        });
+      }
+      await transaction.activityTeamLayout.update({
+        where: { id: teamLayout.id },
+        data: { status: "LOCKED", lockedBy: user.id, lockedAt, revision: { increment: 1 } },
+      });
       await transaction.activityStrategySnapshot.updateMany({
         where: { target: { activityId: id }, status: "EDITING" },
         data: { status: "LOCKED", lockedBy: user.id, lockedAt, revision: { increment: 1 } },
@@ -775,6 +941,24 @@ export class ActivitiesService {
         data: { rosterLockedAt: null, version: { increment: 1 } },
       });
       if (!activityUnlocked.count) throw versionConflict();
+      await transaction.activityTeamSeat.updateMany({
+        where: { layout: { activityId: id } },
+        data: {
+          userIdSnapshot: null,
+          userNameSnapshot: null,
+          characterIdSnapshot: null,
+          characterName: null,
+          realmName: null,
+          classIdSnapshot: null,
+          className: null,
+          specIdSnapshot: null,
+          specNameSnapshot: null,
+        },
+      });
+      await transaction.activityTeamLayout.updateMany({
+        where: { activityId: id, status: "LOCKED" },
+        data: { status: "EDITING", lockedBy: null, lockedAt: null, revision: { increment: 1 } },
+      });
       await transaction.activityStrategySnapshotSlot.updateMany({
         where: { snapshot: { target: { activityId: id } } },
         data: {
@@ -1008,20 +1192,70 @@ function serializeSignup(
   };
 }
 
-function buildTeamSeatSlots() {
+function buildActivityTeamSeatRows() {
   return Array.from({ length: 8 }, (_, groupIndex) =>
-    Array.from({ length: 5 }, (_, positionIndex) => {
-      const groupNo = groupIndex + 1;
-      const positionNo = positionIndex + 1;
-      return {
-        slotKey: `__team_g${groupNo}_p${positionNo}`,
-        label: `第${groupNo}组 · ${positionNo}号位`,
-        groupNo,
-        positionNo,
-        orderIndex: groupIndex * 5 + positionIndex + 1,
-      };
-    }),
+    Array.from({ length: 5 }, (_, positionIndex) => ({
+      groupNo: groupIndex + 1,
+      positionNo: positionIndex + 1,
+    })),
   ).flat();
+}
+
+function serializeTeamLayout(layout: {
+  id: bigint;
+  revision: number;
+  groupCount: number;
+  seatsPerGroup: number;
+  status: string;
+  needsReview: boolean;
+  lockedAt: Date | null;
+  seats: Array<{
+    groupNo: number;
+    positionNo: number;
+    signupId: bigint | null;
+    userNameSnapshot: string | null;
+    characterName: string | null;
+    realmName: string | null;
+    classIdSnapshot: number | null;
+    className: string | null;
+    specNameSnapshot: string | null;
+    signup: {
+      user: { name: string | null; guildNickname: string | null };
+      character: {
+        id: bigint;
+        name: string;
+        serverName: string;
+        classId: number;
+        characterClass: { name: string | null; en_name: string | null };
+      };
+      specs: { name: string | null } | null;
+    } | null;
+  }>;
+}) {
+  return {
+    id: layout.id.toString(),
+    revision: layout.revision,
+    groupCount: layout.groupCount,
+    seatsPerGroup: layout.seatsPerGroup,
+    status: layout.status === "LOCKED" ? "LOCKED" : "EDITING",
+    needsReview: layout.needsReview,
+    lockedAt: layout.lockedAt?.toISOString() ?? null,
+    seats: layout.seats.map((seat) => ({
+      groupNo: seat.groupNo,
+      positionNo: seat.positionNo,
+      signupId: seat.signupId?.toString() ?? null,
+      userName: seat.userNameSnapshot ?? seat.signup?.user.guildNickname ?? seat.signup?.user.name ?? null,
+      characterName: seat.characterName ?? seat.signup?.character.name ?? null,
+      realmName: seat.realmName ?? seat.signup?.character.serverName ?? null,
+      classId: seat.classIdSnapshot ?? seat.signup?.character.classId ?? null,
+      className:
+        seat.className ??
+        seat.signup?.character.characterClass.name ??
+        seat.signup?.character.characterClass.en_name ??
+        null,
+      specName: seat.specNameSnapshot ?? seat.signup?.specs?.name ?? null,
+    })),
+  };
 }
 
 function serializeSnapshotTaskForActivity(

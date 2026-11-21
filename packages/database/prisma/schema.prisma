@@ -60,6 +60,10 @@ model User {
   createdActivityStrategySnapshots                                        ActivityStrategySnapshot[]    @relation("ActivityStrategySnapshotCreator")
   lockedActivityStrategySnapshots                                         ActivityStrategySnapshot[]    @relation("ActivityStrategySnapshotLocker")
   assignedActivityStrategySnapshotSlots                                  ActivityStrategySnapshotSlot[] @relation("ActivityStrategySlotAssigner")
+  /// 用户锁定过的活动团队框架。
+  lockedActivityTeamLayouts                                               ActivityTeamLayout[]          @relation("ActivityTeamLayoutLocker")
+  /// 用户执行过的活动团队席位分配。
+  assignedActivityTeamSeats                                               ActivityTeamSeat[]           @relation("ActivityTeamSeatAssigner")
   updatedWclGuildProgressSetting                                          WclGuildProgressSetting[]
 
   @@index([isApproved, status], map: "idx_users_approval")
@@ -277,12 +281,92 @@ model Activity {
   attendanceRecords        AttendanceRecord[]
   wclReports               WclReport[]
   raidTargets              ActivityRaidTarget[]
+  /// 活动级唯一团队框架；所有 Boss 战术快照共享此框架。
+  teamLayout               ActivityTeamLayout?
 
   @@index([isDeleted, status, beginAt], map: "idx_activities_list")
   @@index([creator, beginAt], map: "idx_activities_creator_time")
   @@index([inviter], map: "activities_characters_id_fk")
   @@index([type], map: "activities_types_id_fk")
   @@map("activities")
+}
+
+/// 活动级团队框架，固定描述一场活动的分组数量和每组席位数量。
+model ActivityTeamLayout {
+  /// 团队框架主键。
+  id            BigInt             @id @default(autoincrement()) @db.UnsignedBigInt
+  /// 所属活动；每个活动最多有一个当前团队框架。
+  activityId    BigInt             @unique @map("activity_id") @db.UnsignedBigInt
+  /// 团队框架的乐观锁修订号，每次保存分组后递增。
+  revision      Int                @default(1) @db.UnsignedInt
+  /// 团队组数，当前默认且前端固定为 8 组。
+  groupCount    Int                @default(8) @map("group_count") @db.UnsignedTinyInt
+  /// 每组席位数，当前默认且前端固定为 5 个席位。
+  seatsPerGroup Int                @default(5) @map("seats_per_group") @db.UnsignedTinyInt
+  /// 团队框架状态：EDITING 表示可编辑，LOCKED 表示随活动名单一并锁定。
+  status        String             @default("EDITING") @db.VarChar(16)
+  /// 旧活动的多个 Boss 分组数据不一致时为真，提示管理员人工核对后保存。
+  needsReview   Boolean            @default(false) @map("needs_review")
+  /// 团队框架锁定时间。
+  lockedAt      DateTime?          @map("locked_at") @db.DateTime(0)
+  /// 执行锁定操作的用户。
+  lockedBy      BigInt?            @map("locked_by") @db.UnsignedBigInt
+  /// 团队框架创建时间。
+  createdAt     DateTime           @default(now()) @map("created_at") @db.DateTime(0)
+  /// 团队框架最后修改时间。
+  updatedAt     DateTime           @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
+
+  activity      Activity           @relation(fields: [activityId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_activity_team_layout_activity")
+  locker        User?              @relation("ActivityTeamLayoutLocker", fields: [lockedBy], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_activity_team_layout_locker")
+  seats         ActivityTeamSeat[]
+
+  @@index([lockedBy], map: "idx_activity_team_layout_locker")
+  @@map("activity_team_layouts")
+}
+
+/// 活动团队框架中的一个固定席位；新建团队框架时会生成 8×5 共 40 个席位。
+model ActivityTeamSeat {
+  /// 团队席位主键。
+  id                  BigInt             @id @default(autoincrement()) @db.UnsignedBigInt
+  /// 所属活动团队框架。
+  layoutId            BigInt             @map("layout_id") @db.UnsignedBigInt
+  /// 团队组号，从 1 开始。
+  groupNo             Int                @map("group_no") @db.UnsignedTinyInt
+  /// 组内席位号，从 1 开始。
+  positionNo          Int                @map("position_no") @db.UnsignedTinyInt
+  /// 当前绑定的活动报名记录；未分配时为空。
+  signupId            BigInt?            @map("signup_id") @db.UnsignedBigInt
+  /// 锁定时固化的用户主键。
+  userIdSnapshot      BigInt?            @map("user_id_snapshot") @db.UnsignedBigInt
+  /// 锁定时固化的成员名称。
+  userNameSnapshot    String?            @map("user_name_snapshot") @db.VarChar(255)
+  /// 锁定时固化的角色主键。
+  characterIdSnapshot BigInt?            @map("character_id_snapshot") @db.UnsignedBigInt
+  /// 锁定时固化的角色名称。
+  characterName       String?            @map("character_name_snapshot") @db.VarChar(64)
+  /// 锁定时固化的服务器名称。
+  realmName           String?            @map("realm_name_snapshot") @db.VarChar(64)
+  /// 锁定时固化的职业主键。
+  classIdSnapshot     Int?               @map("class_id_snapshot")
+  /// 锁定时固化的职业名称。
+  className           String?            @map("class_name_snapshot") @db.VarChar(64)
+  /// 锁定时固化的专精主键。
+  specIdSnapshot      Int?               @map("spec_id_snapshot")
+  /// 锁定时固化的专精名称。
+  specNameSnapshot    String?            @map("spec_name_snapshot") @db.VarChar(64)
+  /// 最近一次修改该席位的用户。
+  assignedBy          BigInt?            @map("assigned_by") @db.UnsignedBigInt
+  /// 最近一次修改该席位的时间。
+  assignedAt          DateTime?          @map("assigned_at") @db.DateTime(0)
+
+  layout              ActivityTeamLayout @relation(fields: [layoutId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_activity_team_seat_layout")
+  signup              ActivitySignup?    @relation(fields: [signupId], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_activity_team_seat_signup")
+  assigner            User?              @relation("ActivityTeamSeatAssigner", fields: [assignedBy], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_activity_team_seat_assigner")
+
+  @@unique([layoutId, groupNo, positionNo], map: "uk_activity_team_seat_position")
+  @@index([signupId], map: "idx_activity_team_seat_signup")
+  @@index([assignedBy], map: "idx_activity_team_seat_assigner")
+  @@map("activity_team_seats")
 }
 
 model ActivitySignup {
@@ -313,6 +397,8 @@ model ActivitySignup {
   user                                     User                           @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_signup_user")
   attendanceRecords                        AttendanceRecord[]
   strategySlots                            ActivityStrategySnapshotSlot[]
+  /// 该报名记录当前占用过的活动团队席位。
+  teamSeats                                ActivityTeamSeat[]
 
   strategyTasksAsExecutor                  ActivityStrategySnapshotTask[] @relation("StrategyTaskExecutor")
   strategyTasksAsFallback                  ActivityStrategySnapshotTask[] @relation("StrategyTaskFallback")
