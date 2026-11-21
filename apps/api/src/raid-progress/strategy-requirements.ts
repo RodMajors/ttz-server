@@ -1,10 +1,17 @@
 import { ConflictException } from "@nestjs/common";
-import type { StrategyPresetSaveInput } from "@ttz/contracts";
 import type { Prisma } from "@ttz/database";
 
 export async function validateRequirementCatalog(
   tx: Prisma.TransactionClient,
-  tasks: StrategyPresetSaveInput["tasks"],
+  tasks: Array<{
+    taskTypeId: number;
+    kind: "SEQUENCE" | "TIMELINE";
+    orderIndex: number;
+    label: string;
+    encounterSpellId?: number | null;
+    playerSpellId?: number | null;
+    notes?: string | null;
+  }>,
 ) {
   const types = [...new Set(tasks.map((task) => task.taskTypeId))];
   const spellIds = [

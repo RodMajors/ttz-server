@@ -279,7 +279,7 @@ describe("RaidProgressService", () => {
       ),
     } as unknown as PrismaService;
 
-    await expect(new RaidProgressService(prisma).savePreset(12n, { blocks: [], tasks: [] })).rejects.toBeInstanceOf(
+    await expect(new RaidProgressService(prisma).savePreset(12n, { items: [] })).rejects.toBeInstanceOf(
       ConflictException,
     );
   });
@@ -328,7 +328,7 @@ describe("RaidProgressService", () => {
       ),
     } as unknown as PrismaService;
 
-    const result = await new RaidProgressService(prisma).savePreset(12n, { blocks: [], tasks: [] });
+    const result = await new RaidProgressService(prisma).savePreset(12n, { items: [] });
 
     expect(result).toMatchObject({ id: "12", status: "DRAFT" });
   });
@@ -434,13 +434,15 @@ describe("RaidProgressService", () => {
       ),
     } as unknown as PrismaService;
     await new RaidProgressService(prisma).savePreset(12n, {
-      blocks: [{ type: "POSITIONING", title: "分散站位", markdown: "按队伍分散", orderIndex: 0 }],
-      tasks: [{ kind: "TIMELINE", taskTypeId: 1, label: "打断", notes: "约开战后 30 秒", orderIndex: 4 }],
+      items: [
+        { type: "POSITIONING", title: "分散站位", markdown: "按队伍分散", orderIndex: 0 },
+        { type: "TIMELINE", taskTypeId: 1, title: "打断", markdown: "约开战后 30 秒", orderIndex: 4 },
+      ],
     });
     expect(dropSlots).toHaveBeenCalledWith({ where: { versionId: 12n } });
     expect(saveTasks).toHaveBeenCalledWith({
       data: [
-        { versionId: 12n, kind: "TIMELINE", taskTypeId: 1, label: "打断", notes: "约开战后 30 秒", orderIndex: 0 },
+        { versionId: 12n, kind: "TIMELINE", taskTypeId: 1, label: "打断", notes: "约开战后 30 秒", orderIndex: 4 },
       ],
     });
     expect(saveBlocks).toHaveBeenCalledWith({

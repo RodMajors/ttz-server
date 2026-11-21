@@ -37,18 +37,32 @@ function transaction(...signups: ReturnType<typeof signup>[]) {
 
 describe("strategy requirements and activity assignments", () => {
   it("accepts an untimed preset and rejects virtual slots, concrete times and board configuration", () => {
-    const draft = { blocks: [{ type: "POSITIONING", title: "分散站位", orderIndex: 0 }], tasks: [presetTask] };
+    const draft = {
+      items: [
+        { type: "POSITIONING", title: "分散站位", orderIndex: 0, markdown: null },
+        { type: "TIMELINE", taskTypeId: 1, title: "第一轮打断", orderIndex: 1, markdown: null },
+      ],
+    };
     expect(strategyPresetSaveSchema.safeParse(draft).success).toBe(true);
     expect(strategyPresetSaveSchema.safeParse({ ...draft, slots: [] }).success).toBe(false);
     expect(
-      strategyPresetSaveSchema.safeParse({ ...draft, tasks: [{ ...presetTask, executorSlotKey: "tank" }] }).success,
+      strategyPresetSaveSchema.safeParse({
+        ...draft,
+        items: [{ ...draft.items[1], executorSlotKey: "tank" }],
+      }).success,
     ).toBe(false);
-    expect(strategyPresetSaveSchema.safeParse({ ...draft, tasks: [{ ...presetTask, offsetMs: 1000 }] }).success).toBe(
-      false,
-    );
-    expect(strategyPresetSaveSchema.safeParse({ ...draft, blocks: [{ ...draft.blocks[0], config: {} }] }).success).toBe(
-      false,
-    );
+    expect(
+      strategyPresetSaveSchema.safeParse({
+        ...draft,
+        items: [{ ...draft.items[1], offsetMs: 1000 }],
+      }).success,
+    ).toBe(false);
+    expect(
+      strategyPresetSaveSchema.safeParse({
+        ...draft,
+        items: [{ ...draft.items[0], config: {} }],
+      }).success,
+    ).toBe(false);
     expect(
       strategyActivitySaveSchema.safeParse({
         revision: 1,

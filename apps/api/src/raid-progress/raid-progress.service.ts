@@ -637,17 +637,44 @@ export class RaidProgressService {
       });
       if (!changed.count)
         throw new ConflictException({ code: "STRATEGY_VERSION_IMMUTABLE", message: "只能编辑启用方案的草稿" });
-      await validateRequirementCatalog(tx, input.tasks);
+      const blocks = input.items.filter(
+        (
+          item,
+        ): item is Extract<
+          StrategyPresetSaveInput["items"][number],
+          { type: "POSITIONING" | "RAID_GROUPS" | "NOTES" }
+        > => item.type === "POSITIONING" || item.type === "RAID_GROUPS" || item.type === "NOTES",
+      );
+      const tasks = input.items
+        .filter(
+          (item): item is Extract<StrategyPresetSaveInput["items"][number], { type: "SEQUENCE" | "TIMELINE" }> =>
+            item.type === "SEQUENCE" || item.type === "TIMELINE",
+        )
+        .map((item) => ({
+          taskTypeId: item.taskTypeId,
+          kind: item.type,
+          orderIndex: item.orderIndex,
+          label: item.title,
+          encounterSpellId: item.encounterSpellId,
+          playerSpellId: item.playerSpellId,
+          notes: item.markdown,
+        }));
+      await validateRequirementCatalog(tx, tasks);
       await tx.bossStrategyBlock.deleteMany({ where: { versionId } });
       await tx.bossStrategySlot.deleteMany({ where: { versionId } });
       await tx.bossStrategyTask.deleteMany({ where: { versionId } });
-      if (input.blocks.length)
-        await tx.bossStrategyBlock.createMany({ data: input.blocks.map((block) => ({ ...block, versionId })) });
-      const order = { SEQUENCE: 0, TIMELINE: 0 };
-      if (input.tasks.length)
-        await tx.bossStrategyTask.createMany({
-          data: input.tasks.map((task) => requirementData(versionId, { ...task, orderIndex: order[task.kind]++ })),
+      if (blocks.length)
+        await tx.bossStrategyBlock.createMany({
+          data: blocks.map((block) => ({
+            versionId,
+            type: block.type,
+            title: block.title,
+            orderIndex: block.orderIndex,
+            markdown: block.markdown ?? null,
+          })),
         });
+      if (tasks.length)
+        await tx.bossStrategyTask.createMany({ data: tasks.map((task) => requirementData(versionId, task)) });
     });
     return this.getStrategyVersion(versionId, true);
   }
@@ -1063,7 +1090,15 @@ async function copyVersion(tx: Prisma.TransactionClient, sourceId: bigint, targe
 
 function requirementData(
   versionId: bigint,
-  task: Omit<StrategyPresetSaveInput["tasks"][number], "kind"> & { kind: string },
+  task: {
+    kind: string;
+    orderIndex: number;
+    label: string;
+    notes?: string | null;
+    taskTypeId: number;
+    encounterSpellId?: number | null;
+    playerSpellId?: number | null;
+  },
 ) {
   const { kind, orderIndex, label, notes, taskTypeId, encounterSpellId, playerSpellId } = task;
   return { versionId, kind, orderIndex, label, notes, taskTypeId, encounterSpellId, playerSpellId };
@@ -1356,5 +1391,27 @@ function serializeVersion(version: StrategyVersionWithContent) {
       orderIndex: slot.orderIndex,
     })),
     tasks: version.tasks.map((task) => serializeStrategyTask(task)),
+    items: serializePresetItems(version),
   };
+}
+
+function serializePresetItems(version: StrategyVersionWithContent) {
+  const textTypes = new Set(["POSITIONING", "RAID_GROUPS", "NOTES"]);
+  return [
+    ...version.blocks.map((block) => ({
+      type: (textTypes.has(block.type) ? block.type : "NOTES") as "POSITIONING" | "RAID_GROUPS" | "NOTES",
+      title: block.title,
+      orderIndex: block.orderIndex,
+      markdown: block.markdown,
+    })),
+    ...version.tasks.map((task) => ({
+      type: task.kind as "SEQUENCE" | "TIMELINE",
+      title: task.label,
+      orderIndex: task.orderIndex,
+      markdown: task.notes,
+      taskTypeId: task.taskTypeId,
+      encounterSpellId: task.encounterSpellId,
+      playerSpellId: task.playerSpellId,
+    })),
+  ].sort((left, right) => left.orderIndex - right.orderIndex);
 }
