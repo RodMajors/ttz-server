@@ -9,3 +9,4 @@ packages/database/generated/
 .env.*
 !.env.example
 *.log
+.idea/*
