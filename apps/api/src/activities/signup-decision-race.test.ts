@@ -3,23 +3,19 @@ import type { PrismaService } from "../database/prisma.service";
 import { ActivitiesService } from "./activities.service";
 
 describe("signup decision serialization", () => {
-  it("locks the activity version before counting confirmed members", async () => {
+  it("locks the activity version before updating a signup without enforcing display guidance", async () => {
     const calls: string[] = [];
     const transaction = {
       activity: {
         update: vi.fn().mockImplementation(async () => {
           calls.push("lock");
-          return { maxPlayers: 20, status: 1 };
+          return { status: 1 };
         }),
       },
       activitySignup: {
         findFirst: vi.fn().mockImplementation(async () => {
           calls.push("find");
           return { id: 8n, status: 0 };
-        }),
-        count: vi.fn().mockImplementation(async () => {
-          calls.push("count");
-          return 19;
         }),
         update: vi.fn().mockImplementation(async () => {
           calls.push("update");
@@ -35,11 +31,11 @@ describe("signup decision serialization", () => {
 
     await service.decide(1n, 8n, { status: "CONFIRMED", orderIndex: 0 }, leader());
 
-    expect(calls).toEqual(["lock", "find", "count", "update"]);
+    expect(calls).toEqual(["lock", "find", "update"]);
     expect(transaction.activity.update).toHaveBeenCalledWith({
       where: { id: 1n },
       data: { version: { increment: 1 } },
-      select: { maxPlayers: true, status: true },
+      select: { status: true },
     });
   });
 });

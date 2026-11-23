@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query } from "@nestjs/common";
 import {
   type CreateCharacterInput,
+  characterSearchQuerySchema,
   characterVerificationDecisionSchema,
   createCharacterSchema,
   guildGroupInputSchema,
@@ -107,6 +108,30 @@ export class MembersController {
       this.prisma.user.count({ where }),
     ]);
     return { items: users.map((user) => ({ ...user, id: user.id.toString() })), pagination: { ...query, total } };
+  }
+
+  @Get("characters/search")
+  async searchCharacters(@Query(new ZodValidationPipe(characterSearchQuerySchema)) query: { search: string }) {
+    const search = query.search.trim();
+    const characters = await this.prisma.character.findMany({
+      where: {
+        isRetired: 0,
+        user: { isApproved: 1, status: 1 },
+        OR: [
+          { name: { contains: search } },
+          { serverName: { contains: search } },
+          { user: { name: { contains: search } } },
+          { user: { guildNickname: { contains: search } } },
+        ],
+      },
+      include: { ...characterInclude, user: { select: { name: true, guildNickname: true } } },
+      orderBy: [{ isMain: "desc" }, { name: "asc" }],
+      take: 30,
+    });
+    return characters.map((character) => ({
+      memberName: character.user.guildNickname ?? character.user.name ?? "TTZ 成员",
+      character: serializeCharacter(character),
+    }));
   }
 
   @Get("characters")

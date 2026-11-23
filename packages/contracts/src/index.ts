@@ -98,7 +98,7 @@ export const activitySummarySchema = z.object({
   status: activityStatusSchema,
   beginAt: isoDateTimeSchema,
   teamUpAt: isoDateTimeSchema,
-  maxPlayers: z.number().int().positive(),
+  maxPlayers: z.number().int().positive().nullable(),
   signupDeadline: isoDateTimeSchema.nullable(),
   signupCount: z.number().int().nonnegative(),
   confirmedCount: z.number().int().nonnegative(),
@@ -161,6 +161,10 @@ export const characterSummarySchema = z.object({
 });
 export type CharacterSummary = z.infer<typeof characterSummarySchema>;
 export const characterListSchema = z.array(characterSummarySchema);
+export const characterSearchQuerySchema = z.object({ search: z.string().trim().min(1).max(100) });
+export const characterSearchResultsSchema = z.array(
+  z.object({ memberName: z.string(), character: characterSummarySchema }),
+);
 
 export const activitySignupSchema = z.object({
   id: idSchema,
@@ -243,7 +247,7 @@ export const activityDetailSchema = z.object({
   endAt: isoDateTimeSchema,
   teamUpAt: isoDateTimeSchema,
   signupDeadline: isoDateTimeSchema.nullable(),
-  maxPlayers: z.number().int(),
+  maxPlayers: z.number().int().nullable(),
   tankSlots: z.number().int().nullable(),
   healerSlots: z.number().int().nullable(),
   meleeSlots: z.number().int().nullable(),
@@ -258,6 +262,7 @@ export const activityDetailSchema = z.object({
   mySignup: activitySignupSchema.nullable(),
   signups: z.array(activitySignupSchema),
   teamLayout: activityTeamLayoutSchema.nullable(),
+  inviter: characterSummarySchema.nullable(),
   raid: z.lazy(() => raidActivityDetailSchema).nullable(),
 });
 export type ActivityDetail = z.infer<typeof activityDetailSchema>;
@@ -267,11 +272,12 @@ const activityFieldsSchema = z.object({
   type: activityTypeCodeSchema,
   description: z.string().trim().max(10_000).optional(),
   passphrase: z.string().trim().max(255).nullable().optional(),
+  inviterId: idSchema.nullable().optional(),
   beginAt: isoDateTimeSchema,
   teamUpAt: isoDateTimeSchema.optional(),
   signupDeadline: isoDateTimeSchema,
   durationMinutes: z.number().int().min(30).max(1440).multipleOf(30).default(120),
-  maxPlayers: z.number().int().min(1).max(100),
+  maxPlayers: z.number().int().min(1).max(100).nullable().optional(),
   tankSlots: z.number().int().min(0).max(100).nullable().optional(),
   healerSlots: z.number().int().min(0).max(100).nullable().optional(),
   meleeSlots: z.number().int().min(0).max(100).nullable().optional(),
@@ -316,13 +322,6 @@ export const createActivitySchema = activityFieldsSchema.superRefine((value, con
   }
   if (value.teamUpAt && new Date(value.teamUpAt) > beginAt) {
     context.addIssue({ code: "custom", path: ["teamUpAt"], message: "集合时间不能晚于活动开始时间" });
-  }
-  const requested = [value.tankSlots, value.healerSlots, value.meleeSlots, value.rangedSlots].reduce<number>(
-    (sum, count) => sum + (count ?? 0),
-    0,
-  );
-  if (requested > value.maxPlayers) {
-    context.addIssue({ code: "custom", path: ["maxPlayers"], message: "职责需求总数不能超过人数上限" });
   }
 });
 export const createRaidActivitySchema = createActivitySchema;

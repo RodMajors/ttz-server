@@ -76,6 +76,7 @@ export class ActivitiesService {
       include: {
         typeDefinition: true,
         creatorUser: { select: { id: true, name: true, guildNickname: true } },
+        characters: { include: characterInclude },
         signups: {
           include: {
             user: { select: { id: true, name: true, guildNickname: true } },
@@ -133,6 +134,7 @@ export class ActivitiesService {
       status: activityCodeToStatus[activity.status] ?? "DRAFT",
       description: activity.description,
       passphrase: activity.passphrase,
+      inviter: activity.characters ? serializeCharacter(activity.characters) : null,
       beginAt: activity.beginAt.toISOString(),
       endAt: activity.endAt.toISOString(),
       teamUpAt: (activity.teamUpAt ?? new Date(activity.beginAt.getTime() - 20 * 60_000)).toISOString(),
@@ -218,6 +220,7 @@ export class ActivitiesService {
     if (!type) throw new ConflictException({ code: "ACTIVITY_TYPE_NOT_READY", message: "活动类型基础数据尚未配置" });
     const beginAt = new Date(input.beginAt);
     const raid = input.raid;
+    const inviterId = await this.resolveInviterId(input.inviterId);
     const raidPlan = raid
       ? await this.prisma.raidProgressPlan.findUnique({
           where: { id: BigInt(raid.progressPlanId) },
@@ -234,17 +237,18 @@ export class ActivitiesService {
           type: type.id,
           creator: user.id,
           description: input.description,
-          passphrase: input.passphrase,
+          passphrase: input.passphrase ?? "123",
+          inviter: inviterId,
           beginAt,
           teamUpAt: input.teamUpAt ? new Date(input.teamUpAt) : new Date(beginAt.getTime() - 20 * 60_000),
           endAt: new Date(beginAt.getTime() + input.durationMinutes * 60_000),
           signupDeadline: new Date(input.signupDeadline),
           durationMinutes: input.durationMinutes,
-          maxPlayers: input.maxPlayers,
-          tankSlots: input.tankSlots,
-          healerSlots: input.healerSlots,
-          meleeSlots: input.meleeSlots,
-          rangedSlots: input.rangedSlots,
+          maxPlayers: input.maxPlayers ?? null,
+          tankSlots: input.tankSlots ?? null,
+          healerSlots: input.healerSlots ?? null,
+          meleeSlots: input.meleeSlots ?? null,
+          rangedSlots: input.rangedSlots ?? null,
           attendanceEnabled: (input.attendanceEnabled ?? input.type === "raid_progress") ? 1 : 0,
           teamLayout: {
             create: {
@@ -360,22 +364,13 @@ export class ActivitiesService {
     const durationMinutes = input.durationMinutes ?? activity.durationMinutes;
     const signupDeadline = input.signupDeadline ? new Date(input.signupDeadline) : activity.signupDeadline;
     const teamUpAt = input.teamUpAt ? new Date(input.teamUpAt) : activity.teamUpAt;
-    const maxPlayers = input.maxPlayers ?? activity.maxPlayers;
-    const requested = [
-      input.tankSlots === undefined ? activity.tankSlots : input.tankSlots,
-      input.healerSlots === undefined ? activity.healerSlots : input.healerSlots,
-      input.meleeSlots === undefined ? activity.meleeSlots : input.meleeSlots,
-      input.rangedSlots === undefined ? activity.rangedSlots : input.rangedSlots,
-    ].reduce<number>((sum, count) => sum + (count ?? 0), 0);
     if (!signupDeadline || signupDeadline >= beginAt) {
       throw new ConflictException({ code: "INVALID_SIGNUP_DEADLINE", message: "报名截止时间必须早于活动开始时间" });
     }
     if (teamUpAt && teamUpAt > beginAt) {
       throw new ConflictException({ code: "INVALID_TEAM_UP_TIME", message: "集合时间不能晚于活动开始时间" });
     }
-    if (requested > maxPlayers) {
-      throw new ConflictException({ code: "INVALID_ROLE_SLOTS", message: "职责需求总数不能超过人数上限" });
-    }
+    const inviterId = input.inviterId === undefined ? undefined : await this.resolveInviterId(input.inviterId);
     const type = input.type ? await this.prisma.activityType.findUnique({ where: { code: input.type } }) : undefined;
     if (input.type && !type) {
       throw new ConflictException({ code: "ACTIVITY_TYPE_NOT_READY", message: "活动类型基础数据尚未配置" });
@@ -387,6 +382,7 @@ export class ActivitiesService {
         ...(type ? { type: type.id } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
         ...(input.passphrase !== undefined ? { passphrase: input.passphrase } : {}),
+        ...(inviterId !== undefined ? { inviter: inviterId } : {}),
         beginAt,
         teamUpAt,
         endAt: new Date(beginAt.getTime() + durationMinutes * 60_000),
@@ -648,21 +644,13 @@ export class ActivitiesService {
       const activity = await transaction.activity.update({
         where: { id },
         data: { version: { increment: 1 } },
-        select: { maxPlayers: true, status: true },
+        select: { status: true },
       });
       if (activity.status >= 2) {
         throw new ConflictException({ code: "ACTIVITY_READ_ONLY", message: "已结束或已取消的活动不能处理报名" });
       }
       const signup = await transaction.activitySignup.findFirst({ where: { id: signupId, activityId: id } });
       if (!signup) throw new NotFoundException({ code: "SIGNUP_NOT_FOUND", message: "报名记录不存在" });
-      if (input.status === "CONFIRMED" && signup.status !== signupStatusToCode.CONFIRMED) {
-        const confirmedCount = await transaction.activitySignup.count({
-          where: { activityId: id, status: signupStatusToCode.CONFIRMED },
-        });
-        if (confirmedCount >= activity.maxPlayers) {
-          throw new ConflictException({ code: "ROSTER_FULL", message: "正式名单已达到人数上限" });
-        }
-      }
       return transaction.activitySignup.update({
         where: { id: signupId },
         data: {
@@ -1045,9 +1033,6 @@ export class ActivitiesService {
     if (signups.length !== new Set(signupIds.map(String)).size) {
       throw new NotFoundException({ code: "SIGNUP_NOT_FOUND", message: "名单包含无效报名" });
     }
-    if (input.entries.filter((entry) => entry.status === "CONFIRMED").length > activity.maxPlayers) {
-      throw new ConflictException({ code: "ROSTER_FULL", message: "正式名单人数不能超过活动上限" });
-    }
     const validCharacterCount = input.entries.length
       ? await this.prisma.character.count({
           where: {
@@ -1127,6 +1112,18 @@ export class ActivitiesService {
       throw new ConflictException({ code: "SIGNUP_CLOSED", message: "报名已截止或名单已锁定" });
     }
     return activity;
+  }
+
+  private async resolveInviterId(inviterId: string | null | undefined): Promise<bigint | null | undefined> {
+    if (inviterId === undefined) return undefined;
+    if (inviterId === null) return null;
+    const character = await this.prisma.character.findFirst({
+      where: { id: BigInt(inviterId), isRetired: 0, user: { isApproved: 1, status: 1 } },
+      select: { id: true },
+    });
+    if (!character)
+      throw new ConflictException({ code: "ACTIVITY_INVITER_INVALID", message: "邀请角色不存在或当前不可用" });
+    return character.id;
   }
 
   private async requireManageable(id: bigint, user: AuthUser) {

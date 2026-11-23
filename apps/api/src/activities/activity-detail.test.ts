@@ -29,6 +29,7 @@ describe("activity detail DTO", () => {
     expect(result.mySignup?.officerNote).toBeUndefined();
     expect(result.mySignup?.decisionReason).toBeUndefined();
     expect(result.mySignup?.character).toMatchObject({ id: "10", userId: "7", isMain: true });
+    expect(result.inviter).toMatchObject({ id: "10", name: "Main" });
   });
 });
 
@@ -82,6 +83,7 @@ function fixture(signupStatus: number) {
     rosterLockedAt: null,
     version: 1,
     typeDefinition: { code: "raid_progress" },
+    characters: character,
     creatorUser: { id: 9n, name: "Leader", guildNickname: null },
     signups: [
       {

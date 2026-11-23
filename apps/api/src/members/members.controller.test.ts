@@ -1,9 +1,80 @@
+import { characterSearchResultsSchema } from "@ttz/contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { PrismaService } from "../database/prisma.service";
 import type { CharactersService } from "./characters.service";
 import { MembersController } from "./members.controller";
 
 describe("MembersController current-state settings", () => {
+  it("searches active guild characters by name or member name for activity inviters", async () => {
+    const character = {
+      id: 12n,
+      userId: 3n,
+      name: "Main",
+      serverName: "伊森利恩",
+      serverSlug: "yishenlien",
+      serverRegion: "cn",
+      classId: 1,
+      raceId: null,
+      race: null,
+      raceName: null,
+      gender: null,
+      faction: 1,
+      guildName: null,
+      guildServerName: null,
+      guildServerSlug: null,
+      activeSpecName: "防护",
+      level: 80,
+      activeTitle: null,
+      serverTypeName: null,
+      itemLevel: 700,
+      averageItemLevel: 700,
+      lastLoginAt: null,
+      achievementPoints: null,
+      isMain: 1,
+      isRetired: 0,
+      wclId: 100n,
+      wclCanonicalId: 100n,
+      wclVerificationStatus: 2,
+      wclEvidence: "verified",
+      characterClass: {
+        name: "战士",
+        en_name: "WARRIOR",
+        icon: null,
+        color: "#c79c6e",
+        specs: [{ id: 1, name: "防护", icon: null, role: 1 }],
+      },
+      verifiedByUser: null,
+      user: { name: "Member", guildNickname: "团员" },
+      itemLevelUpdatedAt: null,
+      wclVerifiedAt: null,
+      wclVerifiedBy: null,
+      wclVerificationNote: null,
+      remark: null,
+      created_at: new Date(),
+      updated_at: new Date(),
+    };
+    const findMany = vi.fn().mockResolvedValue([character]);
+    const controller = createController({ character: { findMany } });
+
+    const results = await controller.searchCharacters({ search: "团员" });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          isRetired: 0,
+          user: { isApproved: 1, status: 1 },
+          OR: expect.arrayContaining([
+            { name: { contains: "团员" } },
+            { user: { guildNickname: { contains: "团员" } } },
+          ]),
+        }),
+        take: 30,
+      }),
+    );
+    expect(results).toMatchObject([{ memberName: "团员", character: { id: "12", name: "Main" } }]);
+    expect(characterSearchResultsSchema.parse(results)).toHaveLength(1);
+  });
+
   it("returns enabled notification defaults before a preference row exists", async () => {
     const prisma = { notificationPreference: { findUnique: vi.fn().mockResolvedValue(null) } };
     const controller = createController(prisma);

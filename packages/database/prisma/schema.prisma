@@ -253,7 +253,7 @@ model Activity {
   inviter                  BigInt?                   @db.UnsignedBigInt
   passphrase               String?                   @db.VarChar(255)
   signupDeadline           DateTime?                 @map("signup_deadline") @db.DateTime(0)
-  maxPlayers               Int                       @default(20) @map("max_players") @db.UnsignedSmallInt
+  maxPlayers               Int?                      @map("max_players") @db.UnsignedSmallInt
   tankSlots                Int?                      @map("tank_slots") @db.UnsignedSmallInt
   healerSlots              Int?                      @map("healer_slots") @db.UnsignedSmallInt
   meleeSlots               Int?                      @map("melee_slots") @db.UnsignedSmallInt

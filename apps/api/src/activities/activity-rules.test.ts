@@ -44,4 +44,44 @@ describe("activity request rules", () => {
 
     expect(result.success).toBe(false);
   });
+
+  it("allows an activity to omit roster guidance and does not cap displayed role guidance", () => {
+    const result = createActivitySchema.safeParse({
+      name: "团本开荒",
+      type: "raid_progress",
+      beginAt: "2026-12-01T12:00:00.000Z",
+      signupDeadline: "2026-12-01T10:00:00.000Z",
+      durationMinutes: 180,
+      maxPlayers: 10,
+      tankSlots: 5,
+      healerSlots: 5,
+      meleeSlots: 5,
+      rangedSlots: 5,
+      raid: {
+        progressPlanId: "1",
+        mode: "PROGRESSION",
+        targets: [{ bossId: "2", orderIndex: 0, strategyVersionId: null }],
+      },
+    });
+    const noGuidance = createActivitySchema.safeParse({
+      name: "团本开荒",
+      type: "raid_progress",
+      beginAt: "2026-12-01T12:00:00.000Z",
+      signupDeadline: "2026-12-01T10:00:00.000Z",
+      durationMinutes: 180,
+      maxPlayers: null,
+      tankSlots: null,
+      healerSlots: null,
+      meleeSlots: null,
+      rangedSlots: null,
+      raid: {
+        progressPlanId: "1",
+        mode: "PROGRESSION",
+        targets: [{ bossId: "2", orderIndex: 0, strategyVersionId: null }],
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(noGuidance.success).toBe(true);
+  });
 });
