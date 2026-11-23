@@ -41,6 +41,12 @@ export class RaidProgressController {
     return this.queue.enqueue();
   }
 
+  @Get("sync/:jobId")
+  @MinPrivilege(1)
+  syncStatus(@Param("jobId") jobId: string) {
+    return this.queue.getSyncStatus(jobId);
+  }
+
   @Get("plans/:planId/bosses/:bossId/best-attempt-metrics")
   bestAttemptMetrics(
     @Param("planId", new ZodValidationPipe(idSchema)) planId: string,

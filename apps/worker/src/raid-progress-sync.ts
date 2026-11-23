@@ -26,6 +26,18 @@ type Candidate = {
 };
 type StoredAttempt = Prisma.RaidBossAttemptGetPayload<{ include: { sources: { select: { reportCode: true } } } }>;
 
+export type RaidProgressSyncProgress = {
+  phase: "preparing" | "syncing";
+  planId: string;
+  planName: string;
+  planIndex?: number;
+  planCount?: number;
+  pagesRead: number;
+  page: number;
+  reportsRead: number;
+  fightsRead: number;
+};
+
 export function findMatchingAttempt<T extends Candidate>(fight: Fight, candidates: T[]): T | undefined {
   const fightPlayers = new Set(fight.friendlyPlayers);
   const rosterSimilarity = (players: string[]) => {
@@ -58,6 +70,7 @@ export async function syncGuildRaidProgress(
   wcl: Pick<WarcraftLogsClient, "getRaidZoneInfo" | "getGuildReportPage">,
   env: AppEnv,
   planId?: bigint,
+  onProgress?: (progress: RaidProgressSyncProgress) => Promise<void> | void,
 ) {
   const zones = await wcl.getRaidZoneInfo(env.WCL_REGION);
   const results = [];
@@ -85,9 +98,23 @@ export async function syncGuildRaidProgress(
       pages.set(key, result);
       return result;
     };
-    for (const plan of plans) {
+    const activePlans = plans.filter((plan) => plan.status === "ACTIVE" || plan.status === "COMPLETED");
+    for (const [index, plan] of activePlans.entries()) {
       if (plan.status !== "ACTIVE" && plan.status !== "COMPLETED") continue;
-      results.push(await syncPlan(prisma, plan, zoneId, getPage, env.WCL_SEASON_START_AT));
+      await onProgress?.({
+        phase: "preparing",
+        planId: String(plan.id),
+        planName: plan.name,
+        pagesRead: 0,
+        page: 1,
+        reportsRead: 0,
+        fightsRead: 0,
+      });
+      results.push(
+        await syncPlan(prisma, plan, zoneId, getPage, env.WCL_SEASON_START_AT, async (progress) => {
+          await onProgress?.({ ...progress, planName: plan.name, planIndex: index + 1, planCount: activePlans.length });
+        }),
+      );
     }
     if (planId !== undefined && plans.length) break;
   }
@@ -146,6 +173,13 @@ async function syncPlan(
   zoneId: number,
   getPage: (start: number, end: number, page: number) => Promise<WclGuildReportsPage>,
   seasonStart?: string,
+  onProgress?: (
+    progress: Omit<RaidProgressSyncProgress, "planName"> & {
+      planName?: string;
+      planIndex?: number;
+      planCount?: number;
+    },
+  ) => Promise<void> | void,
 ) {
   const mode = modes.find((item) => item.difficulty === plan.difficulty);
   if (!mode) throw new Error("Unsupported raid difficulty " + plan.difficulty);
@@ -213,6 +247,14 @@ async function syncPlan(
       pagesRead += 1;
       reportsRead += result.reports.length;
       fightsRead += fights.length;
+      await onProgress?.({
+        phase: "syncing",
+        planId: String(plan.id),
+        pagesRead,
+        page: page - 1,
+        reportsRead,
+        fightsRead,
+      });
       more = result.hasMorePages;
     }
     await prisma.raidProgressSyncRun.update({

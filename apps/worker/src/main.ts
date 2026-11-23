@@ -132,22 +132,27 @@ const worker = new Worker(
 const progressWorker = new Worker(
   "ttz-raid-progress",
   async (job) => {
+    const followUpJobIds: string[] = [];
     const plans = await syncGuildRaidProgress(
       prisma,
       wcl,
       env,
       job.data.planId ? BigInt(job.data.planId as string) : undefined,
+      (progress) => job.updateProgress(progress),
     );
     if (job.data.planId) {
       const result = plans.find((plan) => plan.planId === job.data.planId);
-      if (result?.hasMorePages)
-        await queueProgress("continue-guild-raid-progress", { planId: String(job.data.planId) }, 1000);
+      if (result?.hasMorePages) {
+        followUpJobIds.push(
+          await queueProgress("continue-guild-raid-progress", { planId: String(job.data.planId) }, 1000),
+        );
+      }
     } else {
       for (const plan of plans.filter((entry) => entry.hasMorePages)) {
-        await queueProgress("continue-guild-raid-progress", { planId: plan.planId }, 1000);
+        followUpJobIds.push(await queueProgress("continue-guild-raid-progress", { planId: plan.planId }, 1000));
       }
     }
-    return plans;
+    return { plans, followUpJobIds };
   },
   { connection, concurrency: 1, autorun: false },
 );
@@ -177,7 +182,7 @@ async function startProgressWorker() {
 
 async function queueProgress(jobName: string, data: { planId?: string }, delay = 0) {
   const jobId = `${jobName}-${data.planId ?? "all"}-${Date.now()}`;
-  await progressQueue.add(jobName, data, {
+  const job = await progressQueue.add(jobName, data, {
     jobId,
     delay,
     attempts: 3,
@@ -185,6 +190,7 @@ async function queueProgress(jobName: string, data: { planId?: string }, delay =
     removeOnComplete: 20,
     removeOnFail: 100,
   });
+  return String(job.id);
 }
 
 progressWorker.on("failed", (job, error) => {
