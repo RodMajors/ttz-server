@@ -1,0 +1,18 @@
+apps/api/src/auth/auth.service.ts
+  h_1dc22111645538 249,260
+apps/api/src/auth/auth.types.ts
+  h_1dc22111645538 6
+apps/api/src/auth/session-auth.guard.ts
+  h_1dc22111645538 63,74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6344927e41879d8e1f6772a78a90ee9b01e29a9a",
+  "prompts": {},
+  "humans": {
+    "h_1dc22111645538": {
+      "author": "rodmajors <liangzerui@eccom.com.cn>"
+    }
+  }
+}

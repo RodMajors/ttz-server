@@ -1,0 +1,42 @@
+.env.example
+  h_1dc22111645538 24,26
+apps/api/src/raid-progress/raid-progress.controller.ts
+  h_1dc22111645538 2-3,16-19,33-36,38
+apps/api/src/raid-progress/raid-progress.service.ts
+  h_1dc22111645538 3,39,41,43-50,97,103-135,488-492,498-499,513,515-520
+apps/worker/package.json
+  h_1dc22111645538 9
+apps/worker/src/main.ts
+  h_1dc22111645538 1,6,19,135-140,152,155-176,180-187
+apps/worker/src/raid-progress-sync.test.ts
+  h_1dc22111645538 1-60
+apps/worker/src/raid-progress-sync.ts
+  h_1dc22111645538 1-322
+packages/config/src/index.ts
+  h_1dc22111645538 29-35
+packages/contracts/src/index.ts
+  h_1dc22111645538 677-719
+packages/database/prisma/migrations/20261120120000_automatic_raid_progress/migration.sql
+  h_1dc22111645538 1-9
+packages/database/prisma/migrations/20261120150000_cross_season_fight_evidence/migration.sql
+  h_1dc22111645538 1-4
+packages/database/prisma/migrations/20261120180000_single_progress_plan_and_boss_exclusion/migration.sql
+  h_1dc22111645538 1-73
+packages/database/prisma/schema.prisma
+  h_1dc22111645538 353,355,359,368,442,446,467-468,891
+packages/warcraft-logs/src/index.test.ts
+  h_1dc22111645538 191,204,235,246,287,300,333,344
+packages/warcraft-logs/src/index.ts
+  h_1dc22111645538 77,216,218,220-222,236-238,240,243,250,262,267-291
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0ccd2cb70f41dca8913583ca84c224b452965558",
+  "prompts": {},
+  "humans": {
+    "h_1dc22111645538": {
+      "author": "rodmajors <liangzerui@eccom.com.cn>"
+    }
+  }
+}

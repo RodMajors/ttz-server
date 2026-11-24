@@ -1,0 +1,32 @@
+.idea/.gitignore
+  h_1dc22111645538 1-12
+.idea/doNotAskNotifications.xml
+  h_1dc22111645538 1-10
+.idea/modules.xml
+  h_1dc22111645538 1-8
+.idea/ttz-server.iml
+  h_1dc22111645538 1-17
+.idea/vcs.xml
+  h_1dc22111645538 1-6
+apps/api/src/raid-progress/raid-progress.controller.ts
+  h_1dc22111645538 44-49
+apps/api/src/raid-progress/raid-progress.queue.test.ts
+  h_1dc22111645538 1-80
+apps/api/src/raid-progress/raid-progress.queue.ts
+  h_1dc22111645538 7,15-52,55-61,63-80
+apps/worker/src/main.ts
+  h_1dc22111645538 135,141,145-149,152,155,185,193
+apps/worker/src/raid-progress-sync.ts
+  h_1dc22111645538 29-40,73,101-102,104-117,176-182,250-257
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2579069f60702d9e68b0648d1c639495aecf0599",
+  "prompts": {},
+  "humans": {
+    "h_1dc22111645538": {
+      "author": "rodmajors <liangzerui@eccom.com.cn>"
+    }
+  }
+}

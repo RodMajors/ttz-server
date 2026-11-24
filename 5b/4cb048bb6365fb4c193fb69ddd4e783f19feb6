@@ -1,0 +1,54 @@
+.env.example
+  h_1dc22111645538 19-24
+apps/api/src/activities/activities.service.ts
+  h_1dc22111645538 2,80-88,135-160,168-282,794-797
+apps/api/src/activities/activity-raid-snapshot.test.ts
+  h_1dc22111645538 1-92
+apps/api/src/activities/activity-rules.test.ts
+  h_1dc22111645538 1,26-46
+apps/api/src/app.module.ts
+  h_1dc22111645538 17,31
+apps/api/src/raid-progress/raid-progress.controller.ts
+  h_1dc22111645538 1-131
+apps/api/src/raid-progress/raid-progress.module.ts
+  h_1dc22111645538 1-11
+apps/api/src/raid-progress/raid-progress.queue.ts
+  h_1dc22111645538 1-53
+apps/api/src/raid-progress/raid-progress.service.test.ts
+  h_1dc22111645538 1-148
+apps/api/src/raid-progress/raid-progress.service.ts
+  h_1dc22111645538 1-505
+apps/worker/src/main.ts
+  h_1dc22111645538 1,4,17-245,358-395,402-403,414-431
+package.json
+  h_1dc22111645538 16,18-20
+packages/config/src/index.ts
+  h_1dc22111645538 24-29
+packages/contracts/src/index.ts
+  h_1dc22111645538 214,233-249,253-265,281-282,287-314,658-766
+packages/database/prisma/migrations/20261119084607_activity_phase1/migration.sql
+  h_1dc22111645538 1-345
+packages/database/prisma/migrations/20261119093000_raid_progress_configuration/migration.sql
+  h_1dc22111645538 1-28
+packages/database/prisma/migrations/20261119094000_activity_phase1_comments/migration.sql
+  h_1dc22111645538 1-168
+packages/database/prisma/migrations/migration_lock.toml
+  h_1dc22111645538 1-2
+packages/database/prisma/schema.prisma
+  h_1dc22111645538 12-28,30,32-34,38,45-47,53-62,139-141,169-174,176-178,278,288-306,308-312,314,342-621,788-806,862-872,876,881-882,884-891,893-896,899,904-911,962,975,994
+packages/warcraft-logs/src/index.test.ts
+  h_1dc22111645538 160-348
+packages/warcraft-logs/src/index.ts
+  h_1dc22111645538 62-83,200-275
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5b4cb048bb6365fb4c193fb69ddd4e783f19feb6",
+  "prompts": {},
+  "humans": {
+    "h_1dc22111645538": {
+      "author": "rodmajors <liangzerui@eccom.com.cn>"
+    }
+  }
+}
