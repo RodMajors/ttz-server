@@ -1,5 +1,6 @@
 import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import type {
+  ActivityListQuery,
   ActivityTeamLayoutSaveInput,
   CreateActivityInput,
   SignupInput,
@@ -13,6 +14,7 @@ import { serializePublicMember } from "../members/public-member";
 import { serializeTacticalPeople, validateActivityTactics } from "../raid-progress/activity-tactics";
 import {
   activityCodeToStatus,
+  activityStatusToCode,
   attendanceStatusToCode,
   signupCodeToStatus,
   signupStatusToCode,
@@ -23,19 +25,32 @@ import { canMemberChangeSignup } from "./signup-policy";
 export class ActivitiesService {
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
-  async list(user: AuthUser, page: number, pageSize: number) {
-    const where = {
+  async list(user: AuthUser, query: ActivityListQuery) {
+    const where: Prisma.ActivityWhereInput = {
       isDeleted: 0,
       ...(user.privilege >= 1 ? {} : { OR: [{ status: { not: 0 } }, { creator: user.id }] }),
+      ...(query.status ? { status: activityStatusToCode[query.status] } : {}),
+      ...(query.search ? { name: { contains: query.search } } : {}),
+      ...(query.startDate || query.endDate
+        ? {
+            beginAt: {
+              ...(query.startDate ? { gte: localDateBoundary(query.startDate) } : {}),
+              ...(query.endDate ? { lt: localDateBoundary(addDate(query.endDate, 1)) } : {}),
+            },
+          }
+        : {}),
+      ...(query.raidId ? { activity_raid_ext: { is: { raid_id: BigInt(query.raidId) } } } : {}),
+      ...(query.bossId ? { raidTargets: { some: { bossId: BigInt(query.bossId) } } } : {}),
     };
     const [activities, total] = await this.prisma.$transaction([
       this.prisma.activity.findMany({
         where,
-        skip: (page - 1) * pageSize,
-        take: pageSize,
+        skip: (query.page - 1) * query.pageSize,
+        take: query.pageSize,
         orderBy: { beginAt: "desc" },
         include: {
           typeDefinition: true,
+          activity_raid_ext: { include: { raids: { select: { name: true } } } },
           creatorUser: {
             select: {
               id: true,
@@ -64,6 +79,7 @@ export class ActivitiesService {
         id: activity.id.toString(),
         name: activity.name,
         type: activity.typeDefinition.code,
+        typeName: activity.typeDefinition.name,
         status: (["DRAFT", "PUBLISHED", "FINISHED", "CANCELLED"] as const)[activity.status] ?? "DRAFT",
         beginAt: activity.beginAt.toISOString(),
         teamUpAt: (activity.teamUpAt ?? new Date(activity.beginAt.getTime() - 20 * 60_000)).toISOString(),
@@ -71,8 +87,8 @@ export class ActivitiesService {
         signupDeadline: activity.signupDeadline?.toISOString() ?? null,
         signupCount: activity._count.signups,
         confirmedCount: activity.signups.filter((signup) => signup.status === signupStatusToCode.CONFIRMED).length,
+        raidName: activity.activity_raid_ext?.raids.name ?? null,
         creator: serializePublicMember(activity.creatorUser),
-        creatorName: activity.creatorUser.name ?? activity.creatorUser.guildNickname ?? "TTZ 成员",
         canManage: activity.creator === user.id || user.privilege >= 1,
         mySignupStatus:
           signupCodeToStatus[activity.signups.find((signup) => signup.userId === user.id)?.status ?? -1] ?? null,
@@ -81,7 +97,7 @@ export class ActivitiesService {
           Boolean(activity.signupDeadline && activity.signupDeadline > new Date()) &&
           !activity.rosterLockedAt,
       })),
-      pagination: { page, pageSize, total },
+      pagination: { page: query.page, pageSize: query.pageSize, total },
     };
   }
 
@@ -107,7 +123,7 @@ export class ActivitiesService {
         characters: { include: characterInclude },
         signups: {
           include: {
-            user: { select: { id: true, name: true, guildNickname: true } },
+            user: { select: { id: true, name: true, guildNickname: true, avatar: true } },
             character: { include: characterInclude },
             choices: { include: { character: { include: characterInclude } }, orderBy: { priority: "asc" } },
           },
@@ -159,6 +175,7 @@ export class ActivitiesService {
       id: activity.id.toString(),
       name: activity.name,
       type: activity.typeDefinition.code,
+      typeName: activity.typeDefinition.name,
       status: activityCodeToStatus[activity.status] ?? "DRAFT",
       description: activity.description,
       passphrase: activity.passphrase,
@@ -709,6 +726,31 @@ export class ActivitiesService {
     });
   }
 
+  async confirmPendingSignups(id: bigint, user: AuthUser) {
+    const activity = await this.requireManageable(id, user);
+    if (activity.status >= 2 || activity.rosterLockedAt) {
+      throw new ConflictException({ code: "ACTIVITY_READ_ONLY", message: "名单已锁定或活动已结束，不能批量确认" });
+    }
+    return this.prisma.$transaction(async (transaction) => {
+      const changed = await transaction.activity.updateMany({
+        where: { id, version: activity.version, rosterLockedAt: null, status: { lt: 2 } },
+        data: { version: { increment: 1 } },
+      });
+      if (!changed.count) throw versionConflict();
+      const now = new Date();
+      const result = await transaction.activitySignup.updateMany({
+        where: { activityId: id, status: signupStatusToCode.PENDING },
+        data: {
+          status: signupStatusToCode.CONFIRMED,
+          confirmedAt: now,
+          handledAt: now,
+          handledBy: user.id,
+        },
+      });
+      return { confirmedCount: result.count };
+    });
+  }
+
   async saveTeamLayout(activityId: bigint, input: ActivityTeamLayoutSaveInput, editor: AuthUser) {
     const activity = await this.requireManageable(activityId, editor);
     if (activity.status >= 2 || activity.rosterLockedAt)
@@ -743,7 +785,7 @@ export class ActivitiesService {
           where: {
             id: { in: signupIds },
             activityId,
-            status: { in: [signupStatusToCode.CONFIRMED, signupStatusToCode.BENCH] },
+            status: signupStatusToCode.CONFIRMED,
           },
           select: { id: true },
         })
@@ -840,18 +882,32 @@ export class ActivitiesService {
           code: "ACTIVITY_TEAM_LAYOUT_REVIEW_REQUIRED",
           message: "旧活动的团队分组存在历史差异，请先核对并保存团队框架后再锁定名单",
         });
-      const assignedTeamSeats = teamLayout.seats;
-      if (
-        assignedTeamSeats.some(
-          (seat) =>
-            !seat.signup || ![signupStatusToCode.CONFIRMED, signupStatusToCode.BENCH].includes(seat.signup.status),
-        )
-      ) {
-        throw new ConflictException({
-          code: "STRATEGY_SIGNUP_INVALID",
-          message: "存在已失效的团队分组人员绑定，请调整后再锁定名单",
-        });
-      }
+      const confirmedSignups = await transaction.activitySignup.findMany({
+        where: { activityId: id, status: signupStatusToCode.CONFIRMED },
+        select: { id: true },
+      });
+      const confirmedSignupIds = confirmedSignups.map((signup) => signup.id);
+      const staleSeatWhere = confirmedSignupIds.length
+        ? { layoutId: teamLayout.id, signupId: { notIn: confirmedSignupIds } }
+        : { layoutId: teamLayout.id, signupId: { not: null } };
+      await transaction.activityTeamSeat.updateMany({
+        where: staleSeatWhere,
+        data: {
+          signupId: null,
+          assignedBy: null,
+          assignedAt: null,
+          userIdSnapshot: null,
+          userNameSnapshot: null,
+          characterIdSnapshot: null,
+          characterName: null,
+          realmName: null,
+          classIdSnapshot: null,
+          className: null,
+          specIdSnapshot: null,
+          specName: null,
+        },
+      });
+      const assignedTeamSeats = teamLayout.seats.filter((seat) => seat.signup?.status === signupStatusToCode.CONFIRMED);
       const assignedSlots = snapshots.flatMap((snapshot) => snapshot.slots);
       if (
         assignedSlots.some(
@@ -1177,6 +1233,16 @@ export class ActivitiesService {
   }
 }
 
+function localDateBoundary(date: string) {
+  return new Date(`${date}T00:00:00.000+08:00`);
+}
+
+function addDate(date: string, days: number) {
+  const [year, month, day] = date.split("-").map(Number);
+  const next = new Date(Date.UTC(year ?? 0, (month ?? 1) - 1, (day ?? 1) + days));
+  return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-${String(next.getUTCDate()).padStart(2, "0")}`;
+}
+
 function versionConflict() {
   return new ConflictException({
     code: "VERSION_CONFLICT",
@@ -1203,7 +1269,7 @@ function serializeSignup(
     officerNote: string | null;
     decisionReason: string | null;
     signedUpAt: Date;
-    user: { id: bigint; name: string | null; guildNickname: string | null };
+    user: { id: bigint; name: string | null; guildNickname: string | null; avatar: string | null };
     character: Parameters<typeof serializeCharacter>[0];
     choices: Array<{ character: Parameters<typeof serializeCharacter>[0]; specId: number; priority: number }>;
   },
@@ -1213,6 +1279,12 @@ function serializeSignup(
     id: signup.id.toString(),
     userId: signup.userId.toString(),
     memberName: signup.user.name ?? signup.user.guildNickname ?? "TTZ 成员",
+    member: {
+      id: signup.user.id.toString(),
+      name: signup.user.name ?? signup.user.guildNickname ?? "TTZ 成员",
+      avatar: signup.user.avatar,
+      mainCharacter: null,
+    },
     character: serializeCharacter(signup.character),
     preferredRole: roleCodeToRole[signup.preferredRole ?? 0] ?? null,
     preferredSpecId: signup.preferredSpecId,

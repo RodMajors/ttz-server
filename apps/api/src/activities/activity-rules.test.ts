@@ -1,7 +1,13 @@
-import { createActivitySchema, rosterUpdateSchema, signupSchema } from "@ttz/contracts";
+import { activityListQuerySchema, createActivitySchema, rosterUpdateSchema, signupSchema } from "@ttz/contracts";
 import { describe, expect, it } from "vitest";
 
 describe("activity request rules", () => {
+  it("accepts a single-day date range and rejects reversed/invalid dates", () => {
+    expect(activityListQuerySchema.safeParse({ startDate: "2026-11-24", endDate: "2026-11-24" }).success).toBe(true);
+    expect(activityListQuerySchema.safeParse({ startDate: "2026-11-25", endDate: "2026-11-24" }).success).toBe(false);
+    expect(activityListQuerySchema.safeParse({ startDate: "2026-02-30" }).success).toBe(false);
+  });
+
   it("rejects duplicate alternative character/spec choices", () => {
     const result = signupSchema.safeParse({
       characterId: "1",

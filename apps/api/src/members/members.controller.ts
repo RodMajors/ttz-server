@@ -110,7 +110,6 @@ export class MembersController {
         wxNickname: true,
         avatar: true,
         characters: {
-          where: { isRetired: 0 },
           orderBy: [{ isMain: "desc" }, { name: "asc" }],
           include: characterInclude,
         },

@@ -84,7 +84,7 @@ function fixture(signupStatus: number) {
     attendanceEnabled: 1,
     rosterLockedAt: null,
     version: 1,
-    typeDefinition: { code: "raid_progress" },
+    typeDefinition: { code: "raid_progress", name: "团本开荒" },
     characters: character,
     creatorUser: { id: 9n, name: "Leader", guildNickname: null, avatar: null, characters: [] },
     signups: [
@@ -100,7 +100,7 @@ function fixture(signupStatus: number) {
         officerNote: "private",
         decisionReason: "private",
         signedUpAt: new Date(),
-        user: { id: 7n, name: "Member", guildNickname: null },
+        user: { id: 7n, name: "Member", guildNickname: null, avatar: null },
         character,
         choices: [],
       },

@@ -164,7 +164,11 @@ describe("activity roster snapshot locking", () => {
               .mockResolvedValue({ id: 501n, status: "EDITING", seats: [{ id: 601n, signup: assignedSlot.signup }] }),
             update: vi.fn().mockResolvedValue({}),
           },
-          activityTeamSeat: { update: vi.fn().mockResolvedValue({}) },
+          activitySignup: { findMany: vi.fn().mockResolvedValue([{ id: 30n }]) },
+          activityTeamSeat: {
+            updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+            update: vi.fn().mockResolvedValue({}),
+          },
         }),
       ),
     } as unknown as PrismaService;
@@ -236,6 +240,8 @@ describe("activity roster snapshot locking", () => {
           activityTeamLayout: {
             findUnique: vi.fn().mockResolvedValue({ id: 501n, status: "EDITING", seats: [] }),
           },
+          activitySignup: { findMany: vi.fn().mockResolvedValue([]) },
+          activityTeamSeat: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
         }),
       ),
     } as unknown as PrismaService;

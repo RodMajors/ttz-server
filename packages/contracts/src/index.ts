@@ -67,6 +67,28 @@ export const effectiveAttendanceStatuses = ["PRESENT", "LATE"] as const satisfie
 
 export const activityStatusSchema = z.enum(["DRAFT", "PUBLISHED", "FINISHED", "CANCELLED"]);
 export type ActivityStatus = z.infer<typeof activityStatusSchema>;
+const dateOnlySchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((value) => {
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  }, "日期格式无效");
+export const activityListQuerySchema = pageQuerySchema
+  .extend({
+    status: activityStatusSchema.optional(),
+    search: z.string().trim().max(100).optional(),
+    startDate: dateOnlySchema.optional(),
+    endDate: dateOnlySchema.optional(),
+    raidId: idSchema.optional(),
+    bossId: idSchema.optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.startDate && value.endDate && value.startDate > value.endDate) {
+      context.addIssue({ code: "custom", path: ["endDate"], message: "结束日期不能早于开始日期" });
+    }
+  });
+export type ActivityListQuery = z.infer<typeof activityListQuerySchema>;
 
 export const roleSchema = z.enum(["TANK", "HEALER", "MELEE", "RANGED"]);
 export type Role = z.infer<typeof roleSchema>;
@@ -116,6 +138,7 @@ export const activitySummarySchema = z.object({
   id: idSchema,
   name: z.string(),
   type: activityTypeCodeSchema,
+  typeName: z.string(),
   status: activityStatusSchema,
   beginAt: isoDateTimeSchema,
   teamUpAt: isoDateTimeSchema,
@@ -123,8 +146,8 @@ export const activitySummarySchema = z.object({
   signupDeadline: isoDateTimeSchema.nullable(),
   signupCount: z.number().int().nonnegative(),
   confirmedCount: z.number().int().nonnegative(),
+  raidName: z.string().nullable(),
   creator: publicMemberSummarySchema,
-  creatorName: z.string(),
   canManage: z.boolean(),
   mySignupStatus: signupStatusSchema.nullable(),
   isSignupOpen: z.boolean(),
@@ -203,6 +226,7 @@ export const activitySignupSchema = z.object({
   id: idSchema,
   userId: idSchema,
   memberName: z.string(),
+  member: publicMemberSummarySchema,
   character: characterSummarySchema,
   preferredRole: roleSchema.nullable(),
   preferredSpecId: z.number().int().nullable(),
@@ -268,11 +292,13 @@ export const activityTeamLayoutSaveSchema = z
     }
   });
 export type ActivityTeamLayoutSaveInput = z.infer<typeof activityTeamLayoutSaveSchema>;
+export const activityBulkConfirmResultSchema = z.object({ confirmedCount: z.number().int().nonnegative() });
 
 export const activityDetailSchema = z.object({
   id: idSchema,
   name: z.string(),
   type: activityTypeCodeSchema,
+  typeName: z.string(),
   status: activityStatusSchema,
   description: z.string().nullable(),
   passphrase: z.string().nullable(),

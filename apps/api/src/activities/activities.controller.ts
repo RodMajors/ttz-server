@@ -1,11 +1,11 @@
 import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Put, Query } from "@nestjs/common";
 import {
   type ActivityTeamLayoutSaveInput,
+  activityListQuerySchema,
   activityTeamLayoutSaveSchema,
   type CreateActivityInput,
   createActivitySchema,
   idSchema,
-  pageQuerySchema,
   rosterUpdateSchema,
   type SignupInput,
   signupDecisionSchema,
@@ -25,9 +25,9 @@ export class ActivitiesController {
   @Get()
   list(
     @CurrentUser() user: AuthUser,
-    @Query(new ZodValidationPipe(pageQuerySchema)) query: { page: number; pageSize: number },
+    @Query(new ZodValidationPipe(activityListQuerySchema)) query: Parameters<ActivitiesService["list"]>[1],
   ) {
-    return this.activities.list(user, query.page, query.pageSize);
+    return this.activities.list(user, query);
   }
 
   @Get(":id")
@@ -97,6 +97,11 @@ export class ActivitiesController {
     },
   ) {
     return this.activities.decide(BigInt(id), BigInt(signupId), body, user);
+  }
+
+  @Post(":id/signups/confirm-pending")
+  confirmPendingSignups(@CurrentUser() user: AuthUser, @Param("id", new ZodValidationPipe(idSchema)) id: string) {
+    return this.activities.confirmPendingSignups(BigInt(id), user);
   }
 
   @Post(":id/roster/lock")
