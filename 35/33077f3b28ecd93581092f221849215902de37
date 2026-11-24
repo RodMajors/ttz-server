@@ -1,0 +1,26 @@
+apps/api/src/activities/activities.service.ts
+  h_1dc22111645538 12,39-52,74,93-106,178
+apps/api/src/activities/activity-detail.test.ts
+  h_1dc22111645538 28-29,89
+apps/api/src/members/characters.service.ts
+  h_1dc22111645538 275-284
+apps/api/src/members/members.controller.test.ts
+  h_1dc22111645538 8-78
+apps/api/src/members/members.controller.ts
+  h_1dc22111645538 1,21-27,102-127
+apps/api/src/members/public-member.ts
+  h_1dc22111645538 1-34
+packages/contracts/src/index.ts
+  h_1dc22111645538 94-114,126,186-196,291
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3533077f3b28ecd93581092f221849215902de37",
+  "prompts": {},
+  "humans": {
+    "h_1dc22111645538": {
+      "author": "rodmajors <liangzerui@eccom.com.cn>"
+    }
+  }
+}
