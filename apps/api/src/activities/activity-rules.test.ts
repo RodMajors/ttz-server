@@ -33,8 +33,8 @@ describe("activity request rules", () => {
       durationMinutes: 180,
       maxPlayers: 20,
       raid: {
+        raidId: "3",
         progressPlanId: "1",
-        mode: "PROGRESSION",
         targets: [
           { bossId: "2", orderIndex: 0, strategyVersionId: null },
           { bossId: "2", orderIndex: 1, strategyVersionId: null },
@@ -43,6 +43,18 @@ describe("activity request rules", () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it("accepts a manually selected raid without a progress plan", () => {
+    const result = createActivitySchema.safeParse({
+      name: "团本 Farm",
+      type: "raid_farm",
+      beginAt: "2026-12-01T12:00:00.000Z",
+      signupDeadline: "2026-12-01T10:00:00.000Z",
+      durationMinutes: 180,
+      raid: { raidId: "3", targets: [{ bossId: "2", orderIndex: 0, strategyVersionId: null }] },
+    });
+    expect(result.success).toBe(true);
   });
 
   it("allows an activity to omit roster guidance and does not cap displayed role guidance", () => {
@@ -58,8 +70,8 @@ describe("activity request rules", () => {
       meleeSlots: 5,
       rangedSlots: 5,
       raid: {
+        raidId: "3",
         progressPlanId: "1",
-        mode: "PROGRESSION",
         targets: [{ bossId: "2", orderIndex: 0, strategyVersionId: null }],
       },
     });
@@ -75,8 +87,8 @@ describe("activity request rules", () => {
       meleeSlots: null,
       rangedSlots: null,
       raid: {
+        raidId: "3",
         progressPlanId: "1",
-        mode: "PROGRESSION",
         targets: [{ bossId: "2", orderIndex: 0, strategyVersionId: null }],
       },
     });

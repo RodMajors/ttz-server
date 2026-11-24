@@ -112,7 +112,14 @@ export class RaidProgressService {
       id: raid.id.toString(),
       name: raid.name,
       wclZoneId: raid.wclZoneId,
-      bosses: raid.bosses.map((boss) => ({ id: boss.id.toString(), wclId: boss.wcl_id, name: boss.name })),
+      icon: assetUrl(raid.icon),
+      bosses: raid.bosses.map((boss) => ({
+        id: boss.id.toString(),
+        wclId: boss.wcl_id,
+        name: boss.name,
+        icon: assetUrl(boss.icon),
+        orderIndex: boss.order_index,
+      })),
     }));
   }
 

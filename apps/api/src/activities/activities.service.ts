@@ -161,10 +161,16 @@ export class ActivitiesService {
       teamLayout: activity.teamLayout ? serializeTeamLayout(activity.teamLayout) : null,
       raid: activity.activity_raid_ext
         ? {
-            progressPlanId: activity.activity_raid_ext.progress_plan_id?.toString() ?? "",
+            raidId: activity.activity_raid_ext.raid_id.toString(),
+            progressPlanId: activity.activity_raid_ext.progress_plan_id?.toString() ?? null,
             raidName: activity.activity_raid_ext.raids.name,
-            difficulty: activity.activity_raid_ext.difficulty === 3 ? "MYTHIC" : "HEROIC",
-            mode: activity.activity_raid_ext.mode === 1 ? "PROGRESSION" : "FARM",
+            difficulty:
+              activity.activity_raid_ext.difficulty === 3
+                ? "MYTHIC"
+                : activity.activity_raid_ext.difficulty === 2
+                  ? "HEROIC"
+                  : "UNSPECIFIED",
+            mode: activity.typeDefinition.code === "raid_progress" ? "PROGRESSION" : "FARM",
             targets: activity.raidTargets.map((target) => ({
               id: target.id.toString(),
               bossId: target.bossId.toString(),
@@ -221,15 +227,19 @@ export class ActivitiesService {
     const beginAt = new Date(input.beginAt);
     const raid = input.raid;
     const inviterId = await this.resolveInviterId(input.inviterId);
-    const raidPlan = raid
+    const raidPlan = raid?.progressPlanId
       ? await this.prisma.raidProgressPlan.findUnique({
           where: { id: BigInt(raid.progressPlanId) },
           select: { id: true, raidId: true, difficulty: true },
         })
       : null;
-    if (raid && !raidPlan)
+    if (raid?.progressPlanId && !raidPlan)
       throw new NotFoundException({ code: "RAID_PROGRESS_PLAN_NOT_FOUND", message: "团本进度计划不存在" });
-    const raidTargets = raid && raidPlan ? await this.prepareRaidTargets(raidPlan.id, raid.targets) : [];
+    const raidId = raidPlan?.raidId ?? (raid?.raidId ? BigInt(raid.raidId) : null);
+    if (raid && !raidId) throw new ConflictException({ code: "RAID_REQUIRED", message: "请选择进度计划或指定团本" });
+    if (raidPlan && raid?.raidId && raidPlan.raidId.toString() !== raid.raidId)
+      throw new ConflictException({ code: "RAID_PLAN_MISMATCH", message: "指定团本必须与进度计划关联的团本一致" });
+    const raidTargets = raid && raidId ? await this.prepareRaidTargets(raidPlan?.id ?? null, raidId, raid.targets) : [];
     return this.prisma.$transaction(async (transaction) => {
       return transaction.activity.create({
         data: {
@@ -257,14 +267,14 @@ export class ActivitiesService {
               seats: { create: buildActivityTeamSeatRows() },
             },
           },
-          ...(raidPlan && raid
+          ...(raid && raidId
             ? {
                 activity_raid_ext: {
                   create: {
-                    raid_id: raidPlan.raidId,
-                    progress_plan_id: raidPlan.id,
-                    difficulty: raidPlan.difficulty,
-                    mode: raid.mode === "PROGRESSION" ? 1 : 2,
+                    raid_id: raidId,
+                    progress_plan_id: raidPlan?.id ?? null,
+                    difficulty: raidPlan?.difficulty ?? 0,
+                    mode: input.type === "raid_progress" ? 1 : 2,
                   },
                 },
                 raidTargets: {
@@ -291,19 +301,31 @@ export class ActivitiesService {
     });
   }
 
-  private async prepareRaidTargets(planId: bigint, targets: NonNullable<CreateActivityInput["raid"]>["targets"]) {
-    const bosses = await this.prisma.raidBossProgress.findMany({
-      where: { progressPlanId: planId, bossId: { in: targets.map((target) => BigInt(target.bossId)) } },
-      select: { bossId: true },
-    });
+  private async prepareRaidTargets(
+    planId: bigint | null,
+    raidId: bigint,
+    targets: NonNullable<CreateActivityInput["raid"]>["targets"],
+  ) {
+    const bossIds = targets.map((target) => BigInt(target.bossId));
+    const bosses = planId
+      ? await this.prisma.raidBossProgress.findMany({
+          where: { progressPlanId: planId, bossId: { in: bossIds } },
+          select: { bossId: true },
+        })
+      : await this.prisma.bosses
+          .findMany({
+            where: { raid_id: raidId, id: { in: bossIds }, excludeFromProgress: false },
+            select: { id: true },
+          })
+          .then((rows) => rows.map((boss) => ({ bossId: boss.id })));
     if (bosses.length !== targets.length)
-      throw new ConflictException({ code: "RAID_TARGET_INVALID", message: "目标 Boss 不属于所选进度计划" });
+      throw new ConflictException({ code: "RAID_TARGET_INVALID", message: "目标 Boss 不属于所选团本或进度计划" });
     const versionIds = targets.flatMap((target) =>
       target.strategyVersionId ? [BigInt(target.strategyVersionId)] : [],
     );
     const versions = versionIds.length
       ? await this.prisma.bossStrategyVersion.findMany({
-          where: { id: { in: versionIds }, status: "PUBLISHED", strategy: { progressPlanId: planId } },
+          where: { id: { in: versionIds }, status: "PUBLISHED", strategy: { progressPlanId: planId ?? -1n } },
           include: {
             strategy: { select: { bossId: true } },
             blocks: { orderBy: { orderIndex: "asc" } },

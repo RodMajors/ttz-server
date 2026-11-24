@@ -35,6 +35,11 @@ export class RaidProgressController {
     return this.service.listPlans();
   }
 
+  @Get("catalog")
+  catalog() {
+    return this.service.listCatalog();
+  }
+
   @Post("sync")
   @MinPrivilege(1)
   sync() {

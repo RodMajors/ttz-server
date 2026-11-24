@@ -82,8 +82,8 @@ describe("raid activity strategy snapshots", () => {
           durationMinutes: 180,
           maxPlayers: 20,
           raid: {
+            raidId: "3",
             progressPlanId: "2",
-            mode: "PROGRESSION",
             targets: [{ bossId: "4", orderIndex: 0, strategyVersionId: "5" }],
           },
         },
@@ -122,6 +122,34 @@ describe("raid activity strategy snapshots", () => {
       expect(snapshot.tasks.create[0]).not.toHaveProperty("offsetMs");
     },
   );
+  it("creates raid targets for a manually selected raid without a progress plan", async () => {
+    const createActivity = vi.fn().mockResolvedValue({ id: 100n });
+    const prisma = {
+      activityType: { findUnique: vi.fn().mockResolvedValue({ id: 2n }) },
+      bosses: { findMany: vi.fn().mockResolvedValue([{ id: 8n }]) },
+      $transaction: vi.fn(async (callback) => callback({ activity: { create: createActivity } })),
+    } as unknown as PrismaService;
+
+    await new ActivitiesService(prisma).create(
+      {
+        name: "手动团本活动",
+        type: "raid_farm",
+        beginAt: "2026-12-01T12:00:00.000Z",
+        signupDeadline: "2026-12-01T10:00:00.000Z",
+        durationMinutes: 180,
+        raid: { raidId: "3", targets: [{ bossId: "8", orderIndex: 0, strategyVersionId: null }] },
+      },
+      admin(),
+    );
+
+    expect(createActivity.mock.calls[0]?.[0].data.activity_raid_ext.create).toEqual({
+      raid_id: 3n,
+      progress_plan_id: null,
+      difficulty: 0,
+      mode: 2,
+    });
+    expect(createActivity.mock.calls[0]?.[0].data.raidTargets.create[0]).toMatchObject({ bossId: 8n });
+  });
 });
 
 function admin(): AuthUser {
