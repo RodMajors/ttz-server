@@ -111,7 +111,7 @@ export class RaidProgressController {
     return this.service.listStrategiesForManagement();
   }
 
-  @Get("plans/:id/strategies")
+  @Get("raids/:id/strategies")
   strategies(@Param("id", new ZodValidationPipe(idSchema)) id: string) {
     return this.service.getPublishedStrategies(BigInt(id));
   }

@@ -13,9 +13,7 @@ describe("raid activity strategy snapshots", () => {
         raidProgressPlan: {
           findUnique: vi.fn().mockResolvedValue({ id: 2n, raidId: 3n, difficulty: 3 }),
         },
-        raidBossProgress: {
-          findMany: vi.fn().mockResolvedValue([{ bossId: 4n }]),
-        },
+        bosses: { findMany: vi.fn().mockResolvedValue([{ id: 4n }]) },
         bossStrategyVersion: {
           findMany: vi.fn().mockResolvedValue([
             {
@@ -127,6 +125,9 @@ describe("raid activity strategy snapshots", () => {
     const prisma = {
       activityType: { findUnique: vi.fn().mockResolvedValue({ id: 2n }) },
       bosses: { findMany: vi.fn().mockResolvedValue([{ id: 8n }]) },
+      bossStrategyVersion: {
+        findMany: vi.fn().mockResolvedValue([{ id: 11n, strategy: { bossId: 8n }, blocks: [], tasks: [] }]),
+      },
       $transaction: vi.fn(async (callback) => callback({ activity: { create: createActivity } })),
     } as unknown as PrismaService;
 
@@ -137,7 +138,7 @@ describe("raid activity strategy snapshots", () => {
         beginAt: "2026-12-01T12:00:00.000Z",
         signupDeadline: "2026-12-01T10:00:00.000Z",
         durationMinutes: 180,
-        raid: { raidId: "3", targets: [{ bossId: "8", orderIndex: 0, strategyVersionId: null }] },
+        raid: { raidId: "3", targets: [{ bossId: "8", orderIndex: 0, strategyVersionId: "11" }] },
       },
       admin(),
     );
@@ -148,7 +149,11 @@ describe("raid activity strategy snapshots", () => {
       difficulty: 0,
       mode: 2,
     });
-    expect(createActivity.mock.calls[0]?.[0].data.raidTargets.create[0]).toMatchObject({ bossId: 8n });
+    expect(createActivity.mock.calls[0]?.[0].data.raidTargets.create[0]).toMatchObject({
+      bossId: 8n,
+      strategyVersionId: 11n,
+      strategySnapshot: { create: { sourceVersionId: 11n } },
+    });
   });
 });
 

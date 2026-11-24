@@ -248,13 +248,13 @@ describe("RaidProgressService", () => {
           id: 12n,
           strategyId: 4n,
           status: "DRAFT",
-          strategy: { progressPlanId: 2n, bossId: 3n },
+          strategy: { bossId: 3n },
         }),
       },
       $transaction: vi.fn(async (callback) =>
         callback({
           bossStrategyVersion: { update: publish },
-          raidBossProgress: { update: selectDefault },
+          bosses: { update: selectDefault },
         }),
       ),
     } as unknown as PrismaService;
@@ -267,7 +267,7 @@ describe("RaidProgressService", () => {
       data: expect.objectContaining({ status: "PUBLISHED", publishedBy: 9n }),
     });
     expect(selectDefault).toHaveBeenCalledWith({
-      where: { progressPlanId_bossId: { progressPlanId: 2n, bossId: 3n } },
+      where: { id: 3n },
       data: { defaultStrategyId: 4n },
     });
   });
@@ -338,13 +338,16 @@ describe("RaidProgressService", () => {
         findMany: vi.fn().mockResolvedValue([
           {
             id: 9n,
-            progressPlanId: 2n,
             bossId: 3n,
             name: "稳健方案",
             description: null,
             status: "ACTIVE",
-            plan: { name: "当前史诗计划", difficulty: 3, status: "ACTIVE" },
-            boss: { name: "盘卷祭坛" },
+            boss: {
+              name: "盘卷祭坛",
+              raid_id: 1n,
+              defaultStrategyId: 9n,
+              raids: { name: "烈毒之渊" },
+            },
             versions: [
               {
                 id: 91n,
@@ -370,9 +373,6 @@ describe("RaidProgressService", () => {
           },
         ]),
       },
-      raidBossProgress: {
-        findMany: vi.fn().mockResolvedValue([{ progressPlanId: 2n, bossId: 3n, defaultStrategyId: 9n }]),
-      },
     } as unknown as PrismaService;
     const rows = await new RaidProgressService(prisma).listStrategiesForManagement();
     expect(rows[0]).toMatchObject({ id: "9", bossName: "盘卷祭坛", status: "ACTIVE", isDefault: true });
@@ -387,21 +387,19 @@ describe("RaidProgressService", () => {
     const updateStrategy = vi.fn().mockResolvedValue({ id: 9n, status: "ARCHIVED" });
     const transaction = vi.fn(async (callback: (tx: unknown) => unknown) =>
       callback({
-        raidBossProgress: { updateMany: clearDefault },
+        bosses: { updateMany: clearDefault },
         bossStrategy: { update: updateStrategy },
       }),
     );
     const prisma = {
-      bossStrategy: { findUnique: vi.fn().mockResolvedValue({ id: 9n, progressPlanId: 2n, bossId: 3n }) },
+      bossStrategy: { findUnique: vi.fn().mockResolvedValue({ id: 9n, bossId: 3n }) },
       $transaction: transaction,
     } as unknown as PrismaService;
     await expect(new RaidProgressService(prisma).setStrategyArchived(9n, true)).resolves.toEqual({
       id: "9",
       status: "ARCHIVED",
     });
-    expect(clearDefault).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { progressPlanId: 2n, bossId: 3n, defaultStrategyId: 9n } }),
-    );
+    expect(clearDefault).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 3n, defaultStrategyId: 9n } }));
     expect(updateStrategy).toHaveBeenCalledWith({ where: { id: 9n }, data: { status: "ARCHIVED" } });
   });
   it("converts a legacy draft without persisting slot assignments, timeline offsets or board configs", async () => {

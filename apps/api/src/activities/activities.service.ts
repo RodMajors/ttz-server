@@ -239,7 +239,7 @@ export class ActivitiesService {
     if (raid && !raidId) throw new ConflictException({ code: "RAID_REQUIRED", message: "请选择进度计划或指定团本" });
     if (raidPlan && raid?.raidId && raidPlan.raidId.toString() !== raid.raidId)
       throw new ConflictException({ code: "RAID_PLAN_MISMATCH", message: "指定团本必须与进度计划关联的团本一致" });
-    const raidTargets = raid && raidId ? await this.prepareRaidTargets(raidPlan?.id ?? null, raidId, raid.targets) : [];
+    const raidTargets = raid && raidId ? await this.prepareRaidTargets(raidId, raid.targets) : [];
     return this.prisma.$transaction(async (transaction) => {
       return transaction.activity.create({
         data: {
@@ -301,31 +301,26 @@ export class ActivitiesService {
     });
   }
 
-  private async prepareRaidTargets(
-    planId: bigint | null,
-    raidId: bigint,
-    targets: NonNullable<CreateActivityInput["raid"]>["targets"],
-  ) {
+  private async prepareRaidTargets(raidId: bigint, targets: NonNullable<CreateActivityInput["raid"]>["targets"]) {
     const bossIds = targets.map((target) => BigInt(target.bossId));
-    const bosses = planId
-      ? await this.prisma.raidBossProgress.findMany({
-          where: { progressPlanId: planId, bossId: { in: bossIds } },
-          select: { bossId: true },
-        })
-      : await this.prisma.bosses
-          .findMany({
-            where: { raid_id: raidId, id: { in: bossIds }, excludeFromProgress: false },
-            select: { id: true },
-          })
-          .then((rows) => rows.map((boss) => ({ bossId: boss.id })));
+    const bosses = await this.prisma.bosses
+      .findMany({
+        where: { raid_id: raidId, id: { in: bossIds }, excludeFromProgress: false },
+        select: { id: true },
+      })
+      .then((rows) => rows.map((boss) => ({ bossId: boss.id })));
     if (bosses.length !== targets.length)
-      throw new ConflictException({ code: "RAID_TARGET_INVALID", message: "目标 Boss 不属于所选团本或进度计划" });
+      throw new ConflictException({ code: "RAID_TARGET_INVALID", message: "目标 Boss 不属于所选团本" });
     const versionIds = targets.flatMap((target) =>
       target.strategyVersionId ? [BigInt(target.strategyVersionId)] : [],
     );
     const versions = versionIds.length
       ? await this.prisma.bossStrategyVersion.findMany({
-          where: { id: { in: versionIds }, status: "PUBLISHED", strategy: { progressPlanId: planId ?? -1n } },
+          where: {
+            id: { in: versionIds },
+            status: "PUBLISHED",
+            strategy: { bossId: { in: bossIds }, status: "ACTIVE", boss: { raid_id: raidId } },
+          },
           include: {
             strategy: { select: { bossId: true } },
             blocks: { orderBy: { orderIndex: "asc" } },

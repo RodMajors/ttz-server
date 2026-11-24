@@ -42,8 +42,7 @@ const raidProgressPlanInclude = {
     where: { boss: { excludeFromProgress: false } },
     orderBy: { boss: { order_index: "asc" as const } },
     include: {
-      boss: true,
-      defaultStrategy: { select: { id: true, name: true } },
+      boss: { include: { defaultStrategy: { select: { id: true, name: true } } } },
       attempts: {
         orderBy: [{ startedAt: "asc" as const }, { id: "asc" as const }],
         select: { kill: true, bossPercent: true, phaseData: true },
@@ -113,12 +112,15 @@ export class RaidProgressService {
       name: raid.name,
       wclZoneId: raid.wclZoneId,
       icon: assetUrl(raid.icon),
+      background: assetUrl(raid.background),
       bosses: raid.bosses.map((boss) => ({
         id: boss.id.toString(),
+        raidId: raid.id.toString(),
         wclId: boss.wcl_id,
         name: boss.name,
         icon: assetUrl(boss.icon),
         orderIndex: boss.order_index,
+        excludeFromProgress: boss.excludeFromProgress,
       })),
     }));
   }
@@ -478,8 +480,9 @@ export class RaidProgressService {
   async listStrategiesForManagement() {
     const strategies = await this.prisma.bossStrategy.findMany({
       include: {
-        plan: { select: { id: true, name: true, difficulty: true, status: true } },
-        boss: { select: { name: true } },
+        boss: {
+          select: { id: true, name: true, raid_id: true, defaultStrategyId: true, raids: { select: { name: true } } },
+        },
         versions: {
           orderBy: { versionNo: "desc" },
           include: {
@@ -488,29 +491,18 @@ export class RaidProgressService {
           },
         },
       },
-      orderBy: [{ progressPlanId: "desc" }, { bossId: "asc" }, { name: "asc" }],
+      orderBy: [{ boss: { raid_id: "asc" } }, { bossId: "asc" }, { name: "asc" }],
     });
-    const progress = strategies.length
-      ? await this.prisma.raidBossProgress.findMany({
-          where: { progressPlanId: { in: [...new Set(strategies.map((strategy) => strategy.progressPlanId))] } },
-          select: { progressPlanId: true, bossId: true, defaultStrategyId: true },
-        })
-      : [];
-    const defaults = new Set(
-      progress.flatMap((row) => (row.defaultStrategyId ? [row.defaultStrategyId.toString()] : [])),
-    );
     return strategies.map((strategy) => ({
       id: strategy.id.toString(),
-      progressPlanId: strategy.progressPlanId.toString(),
-      planName: strategy.plan.name,
-      difficulty: strategy.plan.difficulty === 3 ? ("MYTHIC" as const) : ("HEROIC" as const),
-      planStatus: strategy.plan.status,
       bossId: strategy.bossId.toString(),
       bossName: strategy.boss.name,
+      raidId: strategy.boss.raid_id.toString(),
+      raidName: strategy.boss.raids.name,
       name: strategy.name,
       description: strategy.description,
       status: strategy.status === "ARCHIVED" ? ("ARCHIVED" as const) : ("ACTIVE" as const),
-      isDefault: defaults.has(strategy.id.toString()),
+      isDefault: strategy.boss.defaultStrategyId?.toString() === strategy.id.toString(),
       versions: strategy.versions.map((version) => ({
         id: version.id.toString(),
         versionNo: version.versionNo,
@@ -532,21 +524,21 @@ export class RaidProgressService {
   async setDefaultStrategy(strategyId: bigint) {
     const strategy = await this.prisma.bossStrategy.findFirst({
       where: { id: strategyId, status: "ACTIVE", versions: { some: { status: "PUBLISHED" } } },
-      select: { id: true, progressPlanId: true, bossId: true },
+      select: { id: true, bossId: true },
     });
     if (!strategy)
       throw new ConflictException({
         code: "STRATEGY_NOT_PUBLISHABLE",
         message: "只有包含已发布版本的启用方案可以设为默认",
       });
-    const progress = await this.prisma.raidBossProgress.update({
-      where: { progressPlanId_bossId: { progressPlanId: strategy.progressPlanId, bossId: strategy.bossId } },
+    const boss = await this.prisma.bosses.update({
+      where: { id: strategy.bossId },
       data: { defaultStrategyId: strategy.id },
     });
     return {
       strategyId: strategy.id.toString(),
       bossId: strategy.bossId.toString(),
-      defaultStrategyId: progress.defaultStrategyId?.toString() ?? null,
+      defaultStrategyId: boss.defaultStrategyId?.toString() ?? null,
     };
   }
 
@@ -563,13 +555,13 @@ export class RaidProgressService {
   async setStrategyArchived(strategyId: bigint, archived: boolean) {
     const strategy = await this.prisma.bossStrategy.findUnique({
       where: { id: strategyId },
-      select: { id: true, progressPlanId: true, bossId: true },
+      select: { id: true, bossId: true },
     });
     if (!strategy) throw new NotFoundException({ code: "STRATEGY_NOT_FOUND", message: "战术方案不存在" });
     return this.prisma.$transaction(async (tx) => {
       if (archived) {
-        await tx.raidBossProgress.updateMany({
-          where: { progressPlanId: strategy.progressPlanId, bossId: strategy.bossId, defaultStrategyId: strategyId },
+        await tx.bosses.updateMany({
+          where: { id: strategy.bossId, defaultStrategyId: strategyId },
           data: { defaultStrategyId: null },
         });
       }
@@ -581,20 +573,12 @@ export class RaidProgressService {
     });
   }
 
-  async createStrategy(
-    input: { progressPlanId: string; bossId: string; name: string; description?: string | null },
-    userId: bigint,
-  ) {
-    const progressPlanId = BigInt(input.progressPlanId),
-      bossId = BigInt(input.bossId);
-    const progress = await this.prisma.raidBossProgress.findUnique({
-      where: { progressPlanId_bossId: { progressPlanId, bossId } },
-    });
-    if (!progress)
-      throw new NotFoundException({ code: "RAID_BOSS_PROGRESS_NOT_FOUND", message: "该计划中没有此 Boss" });
+  async createStrategy(input: { bossId: string; name: string; description?: string | null }, userId: bigint) {
+    const bossId = BigInt(input.bossId);
+    const boss = await this.prisma.bosses.findUnique({ where: { id: bossId }, select: { id: true } });
+    if (!boss) throw new NotFoundException({ code: "RAID_BOSS_NOT_FOUND", message: "Boss 不存在" });
     const row = await this.prisma.bossStrategy.create({
       data: {
-        progressPlanId,
         bossId,
         name: input.name,
         description: input.description ?? null,
@@ -701,10 +685,8 @@ export class RaidProgressService {
         data: { status: "PUBLISHED", publishedBy: userId, publishedAt: new Date() },
       });
       if (makeDefault)
-        await tx.raidBossProgress.update({
-          where: {
-            progressPlanId_bossId: { progressPlanId: version.strategy.progressPlanId, bossId: version.strategy.bossId },
-          },
+        await tx.bosses.update({
+          where: { id: version.strategy.bossId },
           data: { defaultStrategyId: version.strategyId },
         });
       return published;
@@ -712,24 +694,22 @@ export class RaidProgressService {
     return { id: row.id.toString(), versionNo: row.versionNo, status: row.status };
   }
 
-  async getPublishedStrategies(progressPlanId: bigint) {
-    const [strategies, plan] = await Promise.all([
+  async getPublishedStrategies(raidId: bigint) {
+    const [strategies, bosses] = await Promise.all([
       this.prisma.bossStrategy.findMany({
-        where: { progressPlanId, status: "ACTIVE", versions: { some: { status: "PUBLISHED" } } },
+        where: { boss: { raid_id: raidId }, status: "ACTIVE", versions: { some: { status: "PUBLISHED" } } },
         include: {
           boss: { select: { name: true } },
           versions: { where: { status: "PUBLISHED" }, orderBy: { versionNo: "desc" } },
         },
         orderBy: [{ boss: { order_index: "asc" } }, { name: "asc" }],
       }),
-      this.prisma.raidProgressPlan.findUnique({
-        where: { id: progressPlanId },
-        include: { bosses: { select: { bossId: true, defaultStrategyId: true } } },
+      this.prisma.bosses.findMany({
+        where: { raid_id: raidId },
+        select: { id: true, defaultStrategyId: true },
       }),
     ]);
-    const defaults = new Map(
-      (plan?.bosses ?? []).map((entry) => [entry.bossId.toString(), entry.defaultStrategyId?.toString()]),
-    );
+    const defaults = new Map(bosses.map((entry) => [entry.id.toString(), entry.defaultStrategyId?.toString()]));
     return strategies.map((strategy) => ({
       id: strategy.id.toString(),
       bossId: strategy.bossId.toString(),
@@ -1282,8 +1262,8 @@ function serializePlan(plan: RaidProgressPlanWithBosses) {
         firstKillAt: entry.wclFirstKillAt?.toISOString() ?? null,
         lastKillAt: entry.wclLastKillAt?.toISOString() ?? null,
         manuallyOverridden: false,
-        defaultStrategy: entry.defaultStrategy
-          ? { id: String(entry.defaultStrategy.id), name: entry.defaultStrategy.name }
+        defaultStrategy: entry.boss.defaultStrategy
+          ? { id: String(entry.boss.defaultStrategy.id), name: entry.boss.defaultStrategy.name }
           : null,
       };
     }),

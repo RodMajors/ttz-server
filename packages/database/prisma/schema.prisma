@@ -449,7 +449,6 @@ model RaidProgressPlan {
   raid           raids                 @relation(fields: [raidId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_raid_progress_plan_raid")
   creator        User?                 @relation(fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_raid_progress_plan_creator")
   bosses         RaidBossProgress[]
-  strategies     BossStrategy[]
   raidActivities activity_raid_ext[]
   syncRuns       RaidProgressSyncRun[]
   attempts       RaidBossAttempt[]
@@ -476,13 +475,11 @@ model RaidBossProgress {
   manualReason      String?                       @map("manual_reason") @db.VarChar(255)
   manualUpdatedBy   BigInt?                       @map("manual_updated_by") @db.UnsignedBigInt
   manualUpdatedAt   DateTime?                     @map("manual_updated_at") @db.DateTime(0)
-  defaultStrategyId BigInt?                       @unique(map: "uk_raid_boss_progress_default_strategy") @map("default_strategy_id") @db.UnsignedBigInt
   createdAt         DateTime                      @default(now()) @map("created_at") @db.DateTime(0)
   updatedAt         DateTime                      @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
   plan              RaidProgressPlan              @relation(fields: [progressPlanId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_raid_boss_progress_plan")
   boss              bosses                        @relation(fields: [bossId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_raid_boss_progress_boss")
   manualUpdater     User?                         @relation("RaidBossProgressManualUpdater", fields: [manualUpdatedBy], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_raid_boss_progress_manual_user")
-  defaultStrategy   BossStrategy?                 @relation("RaidBossProgressDefaultStrategy", fields: [defaultStrategyId], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_raid_boss_progress_default_strategy")
   attempts          RaidBossAttempt[]
   overrideLogs      RaidBossProgressOverrideLog[]
 
@@ -565,7 +562,6 @@ model WclReportFightEvidence {
 
 model BossStrategy {
   id             BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
-  progressPlanId BigInt                @map("progress_plan_id") @db.UnsignedBigInt
   bossId         BigInt                @map("boss_id") @db.UnsignedBigInt
   name           String                @db.VarChar(128)
   description    String?               @db.VarChar(500)
@@ -573,13 +569,12 @@ model BossStrategy {
   createdBy      BigInt                @map("created_by") @db.UnsignedBigInt
   createdAt      DateTime              @default(now()) @map("created_at") @db.DateTime(0)
   updatedAt      DateTime              @default(now()) @updatedAt @map("updated_at") @db.DateTime(0)
-  plan           RaidProgressPlan      @relation(fields: [progressPlanId], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "fk_boss_strategy_plan")
   boss           bosses                @relation(fields: [bossId], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_boss_strategy_boss")
   creator        User                  @relation(fields: [createdBy], references: [id], onDelete: Restrict, onUpdate: Restrict, map: "fk_boss_strategy_creator")
   versions       BossStrategyVersion[]
-  defaultFor     RaidBossProgress?     @relation("RaidBossProgressDefaultStrategy")
+  defaultForBoss bosses?               @relation("BossDefaultStrategy")
 
-  @@index([progressPlanId, bossId, status], map: "idx_boss_strategy_plan_boss")
+  @@index([bossId, status], map: "idx_boss_strategy_boss")
   @@map("boss_strategies")
 }
 
@@ -1106,6 +1101,7 @@ model bosses {
   order_index       Int                  @default(1) @db.TinyInt
   icon              String?              @db.VarChar(255)
   excludeFromProgress Boolean             @default(false) @map("exclude_from_progress")
+  defaultStrategyId BigInt?               @unique(map: "uk_boss_default_strategy") @map("default_strategy_id") @db.UnsignedBigInt
   is_final          Int                  @default(0) @db.TinyInt
   progress          Int                  @default(0) @db.SmallInt
   created_at        DateTime             @default(now()) @db.DateTime(0)
@@ -1113,6 +1109,7 @@ model bosses {
   activity_raid_ext activity_raid_ext[]
   raidProgress      RaidBossProgress[]
   bossStrategies    BossStrategy[]
+  defaultStrategy   BossStrategy?         @relation("BossDefaultStrategy", fields: [defaultStrategyId], references: [id], onDelete: SetNull, onUpdate: Restrict, map: "fk_boss_default_strategy")
   activityTargets   ActivityRaidTarget[]
   raids             raids                @relation(fields: [raid_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_boss_raid")
 
