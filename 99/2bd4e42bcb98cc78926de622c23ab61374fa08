@@ -1,0 +1,34 @@
+apps/api/src/activities/activities.service.ts
+  h_745ff005454789 3,7,166,183-186,189,255,257,697-706,719,1027-1056,1059
+apps/api/src/activities/activity-raid-snapshot.test.ts
+  h_745ff005454789 7-17,19-73,75-87,89-119,122-129
+apps/api/src/raid-progress/activity-tactics.test.ts
+  h_745ff005454789 1-103
+apps/api/src/raid-progress/activity-tactics.ts
+  h_745ff005454789 1-125
+apps/api/src/raid-progress/raid-progress.controller.ts
+  h_745ff005454789 10-11,125-136,200,202
+apps/api/src/raid-progress/raid-progress.service.test.ts
+  h_745ff005454789 5,266,277-279,282-284,320,323,331,407-410,412-425,428-432,436-438,440-441,443,446-448
+apps/api/src/raid-progress/raid-progress.service.ts
+  h_745ff005454789 9-14,19-20,595,613,632,634-636,638-640,644-649,663-667,670,770-875,1013,1015-1017,1046,1052,1054-1057,1061-1069,1271-1302,1305,1333
+apps/api/src/raid-progress/strategy-requirements.ts
+  h_745ff005454789 1-43
+packages/contracts/src/index.ts
+  h_745ff005454789 307,329,835,911-975,977-981
+packages/database/prisma/migrations/20261122090000_strategy_requirements_and_assignments/migration.sql
+  h_745ff005454789 1-22
+packages/database/prisma/schema.prisma
+  h_745ff005454789 317-320,505,600,635,638-641,654-660,691
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "992bd4e42bcb98cc78926de622c23ab61374fa08",
+  "prompts": {},
+  "humans": {
+    "h_745ff005454789": {
+      "author": "RodMajors <pro-vana@outlook.com>"
+    }
+  }
+}

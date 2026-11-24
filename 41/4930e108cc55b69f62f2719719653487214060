@@ -1,0 +1,32 @@
+apps/api/src/activities/activities.service.ts
+  h_745ff005454789 79,137,223,240-241,247-251,373,385,647,1117-1128
+apps/api/src/activities/activity-create.test.ts
+  h_745ff005454789 1-79
+apps/api/src/activities/activity-detail.test.ts
+  h_745ff005454789 32,86
+apps/api/src/activities/activity-rules.test.ts
+  h_745ff005454789 47-86
+apps/api/src/activities/signup-decision-race.test.ts
+  h_745ff005454789 6,12,34,38
+apps/api/src/members/members.controller.test.ts
+  h_745ff005454789 1,8-77
+apps/api/src/members/members.controller.ts
+  h_745ff005454789 4,113-136
+packages/contracts/src/index.ts
+  h_745ff005454789 101,164-167,250,265,275,280
+packages/database/prisma/migrations/20261124100000_optional_activity_roster_guidance/migration.sql
+  h_745ff005454789 1-3
+packages/database/prisma/schema.prisma
+  h_745ff005454789 256
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "414930e108cc55b69f62f2719719653487214060",
+  "prompts": {},
+  "humans": {
+    "h_745ff005454789": {
+      "author": "RodMajors <pro-vana@outlook.com>"
+    }
+  }
+}

@@ -1,0 +1,20 @@
+apps/api/src/raid-progress/raid-progress.controller.ts
+  h_745ff005454789 1,5,55-60,97-123
+apps/api/src/raid-progress/raid-progress.service.test.ts
+  h_745ff005454789 331-402
+apps/api/src/raid-progress/raid-progress.service.ts
+  h_745ff005454789 360-465
+packages/contracts/src/index.ts
+  h_745ff005454789 793-823
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "769a5392437c74c0a3072b338ab62b61d0481a7e",
+  "prompts": {},
+  "humans": {
+    "h_745ff005454789": {
+      "author": "RodMajors <pro-vana@outlook.com>"
+    }
+  }
+}

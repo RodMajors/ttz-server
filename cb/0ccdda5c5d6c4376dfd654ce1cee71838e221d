@@ -1,0 +1,24 @@
+apps/api/src/activities/activities.service.ts
+  h_745ff005454789 164-165,167-173,230,236,238-242,270,274-277,304-320,322,328
+apps/api/src/activities/activity-raid-snapshot.test.ts
+  h_745ff005454789 85,125-152
+apps/api/src/activities/activity-rules.test.ts
+  h_745ff005454789 36,48-59,73,90
+apps/api/src/raid-progress/raid-progress.controller.ts
+  h_745ff005454789 38-42
+apps/api/src/raid-progress/raid-progress.service.ts
+  h_745ff005454789 115-122
+packages/contracts/src/index.ts
+  h_745ff005454789 288-289,308,314-319,340-341,343,780-796
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cb0ccdda5c5d6c4376dfd654ce1cee71838e221d",
+  "prompts": {},
+  "humans": {
+    "h_745ff005454789": {
+      "author": "RodMajors <pro-vana@outlook.com>"
+    }
+  }
+}

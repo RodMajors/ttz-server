@@ -1,0 +1,14 @@
+.gitignore
+  h_745ff005454789 12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9bf1226590f14b8ebddd61fb3a17247071c96cbc",
+  "prompts": {},
+  "humans": {
+    "h_745ff005454789": {
+      "author": "RodMajors <pro-vana@outlook.com>"
+    }
+  }
+}

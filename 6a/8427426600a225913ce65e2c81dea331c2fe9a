@@ -1,0 +1,20 @@
+apps/api/src/activities/activity-strategy-assignment.test.ts
+  h_745ff005454789 212-225,247-295
+apps/api/src/raid-progress/raid-progress.controller.ts
+  h_745ff005454789 4,113-124
+apps/api/src/raid-progress/raid-progress.service.ts
+  h_745ff005454789 9,804-855
+packages/contracts/src/index.ts
+  h_745ff005454789 932-1006
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6a8427426600a225913ce65e2c81dea331c2fe9a",
+  "prompts": {},
+  "humans": {
+    "h_745ff005454789": {
+      "author": "RodMajors <pro-vana@outlook.com>"
+    }
+  }
+}
