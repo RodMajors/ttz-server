@@ -9,6 +9,7 @@ import type { Prisma } from "@ttz/database";
 import type { AuthUser } from "../auth/auth.types";
 import { PrismaService } from "../database/prisma.service";
 import { characterInclude, serializeCharacter } from "../members/characters.service";
+import { serializePublicMember } from "../members/public-member";
 import { serializeTacticalPeople, validateActivityTactics } from "../raid-progress/activity-tactics";
 import {
   activityCodeToStatus,
@@ -35,7 +36,20 @@ export class ActivitiesService {
         orderBy: { beginAt: "desc" },
         include: {
           typeDefinition: true,
-          creatorUser: { select: { name: true, guildNickname: true } },
+          creatorUser: {
+            select: {
+              id: true,
+              name: true,
+              guildNickname: true,
+              avatar: true,
+              characters: {
+                where: { isRetired: 0 },
+                orderBy: [{ isMain: "desc" }, { id: "asc" }],
+                take: 1,
+                include: characterInclude,
+              },
+            },
+          },
           _count: { select: { signups: { where: { status: { in: [0, 1, 2] } } } } },
           signups: {
             where: { OR: [{ status: 1 }, { userId: user.id }] },
@@ -57,6 +71,7 @@ export class ActivitiesService {
         signupDeadline: activity.signupDeadline?.toISOString() ?? null,
         signupCount: activity._count.signups,
         confirmedCount: activity.signups.filter((signup) => signup.status === signupStatusToCode.CONFIRMED).length,
+        creator: serializePublicMember(activity.creatorUser),
         creatorName: activity.creatorUser.name ?? activity.creatorUser.guildNickname ?? "TTZ 成员",
         canManage: activity.creator === user.id || user.privilege >= 1,
         mySignupStatus:
@@ -75,7 +90,20 @@ export class ActivitiesService {
       where: { id, isDeleted: 0 },
       include: {
         typeDefinition: true,
-        creatorUser: { select: { id: true, name: true, guildNickname: true } },
+        creatorUser: {
+          select: {
+            id: true,
+            name: true,
+            guildNickname: true,
+            avatar: true,
+            characters: {
+              where: { isRetired: 0 },
+              orderBy: [{ isMain: "desc" }, { id: "asc" }],
+              take: 1,
+              include: characterInclude,
+            },
+          },
+        },
         characters: { include: characterInclude },
         signups: {
           include: {
@@ -147,10 +175,7 @@ export class ActivitiesService {
       attendanceEnabled: activity.attendanceEnabled === 1,
       rosterLockedAt: activity.rosterLockedAt?.toISOString() ?? null,
       version: activity.version,
-      creator: {
-        id: activity.creatorUser.id.toString(),
-        name: activity.creatorUser.name ?? activity.creatorUser.guildNickname ?? "TTZ 成员",
-      },
+      creator: serializePublicMember(activity.creatorUser),
       canManage,
       canSignup:
         canChangeMySignup &&

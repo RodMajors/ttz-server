@@ -91,6 +91,27 @@ export const activityTypeCodeSchema = z.enum([
 ]);
 export type ActivityTypeCode = z.infer<typeof activityTypeCodeSchema>;
 
+const publicMemberMainCharacterSchema = z.object({
+  id: idSchema,
+  name: z.string(),
+  realm: z.string(),
+  className: z.string(),
+  classIconUrl: z.string().url().nullable(),
+  classColor: z.string().nullable(),
+  raceName: z.string().nullable(),
+  activeSpecName: z.string().nullable(),
+  itemLevel: z.number().int().nullable(),
+  averageItemLevel: z.number().int().nullable(),
+  isMain: z.boolean(),
+});
+export const publicMemberSummarySchema = z.object({
+  id: idSchema,
+  name: z.string(),
+  avatar: z.string().url().nullable(),
+  mainCharacter: publicMemberMainCharacterSchema.nullable(),
+});
+export type PublicMemberSummary = z.infer<typeof publicMemberSummarySchema>;
+
 export const activitySummarySchema = z.object({
   id: idSchema,
   name: z.string(),
@@ -102,6 +123,7 @@ export const activitySummarySchema = z.object({
   signupDeadline: isoDateTimeSchema.nullable(),
   signupCount: z.number().int().nonnegative(),
   confirmedCount: z.number().int().nonnegative(),
+  creator: publicMemberSummarySchema,
   creatorName: z.string(),
   canManage: z.boolean(),
   mySignupStatus: signupStatusSchema.nullable(),
@@ -161,6 +183,17 @@ export const characterSummarySchema = z.object({
 });
 export type CharacterSummary = z.infer<typeof characterSummarySchema>;
 export const characterListSchema = z.array(characterSummarySchema);
+export const publicCharacterSchema = characterSummarySchema.omit({
+  verificationEvidence: true,
+  wclId: true,
+  wclCanonicalId: true,
+});
+export const publicMemberProfileSchema = publicMemberSummarySchema.extend({
+  guildNickname: z.string().nullable(),
+  wxNickname: z.string().nullable(),
+  characters: z.array(publicCharacterSchema),
+});
+export type PublicMemberProfile = z.infer<typeof publicMemberProfileSchema>;
 export const characterSearchQuerySchema = z.object({ search: z.string().trim().min(1).max(100) });
 export const characterSearchResultsSchema = z.array(
   z.object({ memberName: z.string(), character: characterSummarySchema }),
@@ -255,7 +288,7 @@ export const activityDetailSchema = z.object({
   attendanceEnabled: z.boolean(),
   rosterLockedAt: isoDateTimeSchema.nullable(),
   version: z.number().int(),
-  creator: z.object({ id: idSchema, name: z.string() }),
+  creator: publicMemberSummarySchema,
   canManage: z.boolean(),
   canSignup: z.boolean(),
   canChangeMySignup: z.boolean(),

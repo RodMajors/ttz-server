@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Inject, NotFoundException, Param, Patch, Post, Query } from "@nestjs/common";
 import {
   type CreateCharacterInput,
   characterSearchQuerySchema,
@@ -18,7 +18,13 @@ import { CurrentUser, MinPrivilege } from "../auth/auth.decorators";
 import type { AuthUser } from "../auth/auth.types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { PrismaService } from "../database/prisma.service";
-import { CharactersService, characterInclude, serializeCharacter } from "./characters.service";
+import {
+  CharactersService,
+  characterInclude,
+  serializeCharacter,
+  serializePublicCharacter,
+} from "./characters.service";
+import { serializePublicMember } from "./public-member";
 
 @Controller()
 export class MembersController {
@@ -90,6 +96,32 @@ export class MembersController {
         })),
       })),
       pagination: { page: query.page, pageSize: query.pageSize, total },
+    };
+  }
+
+  @Get("members/:id/profile")
+  async publicProfile(@Param("id", new ZodValidationPipe(idSchema)) id: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: BigInt(id), isApproved: 1, status: 1 },
+      select: {
+        id: true,
+        name: true,
+        guildNickname: true,
+        wxNickname: true,
+        avatar: true,
+        characters: {
+          where: { isRetired: 0 },
+          orderBy: [{ isMain: "desc" }, { name: "asc" }],
+          include: characterInclude,
+        },
+      },
+    });
+    if (!user) throw new NotFoundException({ code: "MEMBER_NOT_FOUND", message: "成员不存在" });
+    return {
+      ...serializePublicMember(user),
+      guildNickname: user.guildNickname,
+      wxNickname: user.wxNickname,
+      characters: user.characters.map(serializePublicCharacter),
     };
   }
 

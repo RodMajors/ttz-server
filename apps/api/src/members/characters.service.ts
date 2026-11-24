@@ -272,3 +272,13 @@ export function serializeCharacter(character: {
     })),
   };
 }
+
+export function serializePublicCharacter(character: Parameters<typeof serializeCharacter>[0]) {
+  const {
+    verificationEvidence: _verificationEvidence,
+    wclId: _wclId,
+    wclCanonicalId: _wclCanonicalId,
+    ...publicCharacter
+  } = serializeCharacter(character);
+  return publicCharacter;
+}

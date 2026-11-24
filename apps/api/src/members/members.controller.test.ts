@@ -5,6 +5,77 @@ import type { CharactersService } from "./characters.service";
 import { MembersController } from "./members.controller";
 
 describe("MembersController current-state settings", () => {
+  it("returns a public profile only for approved active members and omits private character identifiers", async () => {
+    const character = {
+      id: 12n,
+      userId: 3n,
+      name: "Main",
+      serverName: "伊森利恩",
+      serverSlug: "yishenlien",
+      serverRegion: "cn",
+      classId: 1,
+      raceId: null,
+      race: null,
+      raceName: null,
+      gender: null,
+      faction: 1,
+      guildName: null,
+      guildServerName: null,
+      guildServerSlug: null,
+      activeSpecName: "防护",
+      level: 80,
+      activeTitle: null,
+      serverTypeName: null,
+      itemLevel: 700,
+      averageItemLevel: 700,
+      lastLoginAt: null,
+      achievementPoints: null,
+      isMain: 1,
+      isRetired: 0,
+      wclId: 100n,
+      wclCanonicalId: 100n,
+      wclVerificationStatus: 2,
+      wclEvidence: "private proof",
+      characterClass: {
+        name: "战士",
+        en_name: "WARRIOR",
+        icon: null,
+        color: "#c79c6e",
+        specs: [],
+      },
+      verifiedByUser: null,
+      itemLevelUpdatedAt: null,
+      wclVerifiedAt: null,
+      wclVerifiedBy: null,
+      wclVerificationNote: null,
+      remark: null,
+      created_at: new Date(),
+      updated_at: new Date(),
+    };
+    const findFirst = vi.fn().mockResolvedValue({
+      id: 3n,
+      name: "Member",
+      guildNickname: "团员",
+      wxNickname: "微信名",
+      avatar: "https://cos.example/avatar.png",
+      characters: [character],
+    });
+    const controller = createController({ user: { findFirst } });
+
+    const profile = await controller.publicProfile("3");
+
+    expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 3n, isApproved: 1, status: 1 } }));
+    expect(profile).toMatchObject({
+      id: "3",
+      name: "Member",
+      guildNickname: "团员",
+      wxNickname: "微信名",
+      mainCharacter: { id: "12", name: "Main" },
+    });
+    expect(profile.characters[0]).not.toHaveProperty("verificationEvidence");
+    expect(profile.characters[0]).not.toHaveProperty("wclId");
+  });
+
   it("searches active guild characters by name or member name for activity inviters", async () => {
     const character = {
       id: 12n,

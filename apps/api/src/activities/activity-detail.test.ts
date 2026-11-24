@@ -25,6 +25,8 @@ describe("activity detail DTO", () => {
     const result = await service.get(1n, member());
 
     expect(result.canChangeMySignup).toBe(canChange);
+    expect(result.creator).toMatchObject({ id: "9", name: "Leader", mainCharacter: null });
+    expect(result.creator).toMatchObject({ id: "9", name: "Leader", mainCharacter: null });
     expect(result.mySignup?.status).toBe(signupStatus === 1 ? "CONFIRMED" : "PENDING");
     expect(result.mySignup?.officerNote).toBeUndefined();
     expect(result.mySignup?.decisionReason).toBeUndefined();
@@ -84,7 +86,7 @@ function fixture(signupStatus: number) {
     version: 1,
     typeDefinition: { code: "raid_progress" },
     characters: character,
-    creatorUser: { id: 9n, name: "Leader", guildNickname: null },
+    creatorUser: { id: 9n, name: "Leader", guildNickname: null, avatar: null, characters: [] },
     signups: [
       {
         id: 12n,
