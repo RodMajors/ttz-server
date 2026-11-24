@@ -1,0 +1,28 @@
+apps/api/src/activities/activities.service.ts
+  h_1dc22111645538 242,304,306-311,313,319-323
+apps/api/src/activities/activity-raid-snapshot.test.ts
+  h_1dc22111645538 16,128-130,141,152-156
+apps/api/src/raid-progress/raid-progress.controller.ts
+  h_1dc22111645538 114
+apps/api/src/raid-progress/raid-progress.service.test.ts
+  h_1dc22111645538 251,257,270,345-350,390,395,402
+apps/api/src/raid-progress/raid-progress.service.ts
+  h_1dc22111645538 45,115,118,123,483-485,494,500-501,505,527,534-535,541,558,563-564,576-579,688-689,697-698,700,707-709,712,1265-1266
+packages/contracts/src/index.ts
+  h_1dc22111645538 786,790,795,877-878,897-909
+packages/database/prisma/migrations/20261124130000_boss_scoped_strategies/migration.sql
+  h_1dc22111645538 1-38
+packages/database/prisma/schema.prisma
+  h_1dc22111645538 575,577,1104,1112
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "580381387b6511e04db7563e6a7589bb4224761a",
+  "prompts": {},
+  "humans": {
+    "h_1dc22111645538": {
+      "author": "rodmajors <liangzerui@eccom.com.cn>"
+    }
+  }
+}
