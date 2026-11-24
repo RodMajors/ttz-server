@@ -1,0 +1,28 @@
+apps/api/src/activities/activities.controller.ts
+  h_1dc22111645538 4,28,30,102-106
+apps/api/src/activities/activities.service.ts
+  h_1dc22111645538 3,17,28-29,32-43,48-49,53,82,90,100,126,178,729-753,788,885-910,1236-1245,1272,1282-1287
+apps/api/src/activities/activity-bulk-confirm.test.ts
+  h_1dc22111645538 1-55
+apps/api/src/activities/activity-detail.test.ts
+  h_1dc22111645538 87,103
+apps/api/src/activities/activity-list.test.ts
+  h_1dc22111645538 1-59
+apps/api/src/activities/activity-rules.test.ts
+  h_1dc22111645538 1,5-10
+apps/api/src/activities/activity-strategy-assignment.test.ts
+  h_1dc22111645538 167-171,243-244
+packages/contracts/src/index.ts
+  h_1dc22111645538 70-91,141,149,229,295,301
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1f9aab1ee48a7f8f73d6ec5ae5d3c40d6fd4ce15",
+  "prompts": {},
+  "humans": {
+    "h_1dc22111645538": {
+      "author": "rodmajors <liangzerui@eccom.com.cn>"
+    }
+  }
+}
