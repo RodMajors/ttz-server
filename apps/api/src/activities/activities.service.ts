@@ -8,6 +8,7 @@ import type {
 } from "@ttz/contracts";
 import type { Prisma } from "@ttz/database";
 import type { AuthUser } from "../auth/auth.types";
+import { assetUrl } from "../common/asset-url";
 import { PrismaService } from "../database/prisma.service";
 import { characterInclude, serializeCharacter } from "../members/characters.service";
 import { serializePublicMember } from "../members/public-member";
@@ -217,6 +218,7 @@ export class ActivitiesService {
               id: target.id.toString(),
               bossId: target.bossId.toString(),
               bossName: target.boss.name,
+              bossIcon: assetUrl(target.boss.icon),
               wclId: target.boss.wcl_id,
               orderIndex: target.orderIndex,
               strategyName: target.strategyVersion?.strategy.name ?? "空白战术",

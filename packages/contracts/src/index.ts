@@ -406,6 +406,7 @@ export const raidActivityDetailSchema = z.object({
       id: idSchema,
       bossId: idSchema,
       bossName: z.string(),
+      bossIcon: z.string().nullable().optional(),
       wclId: z.number().int(),
       orderIndex: z.number().int(),
       strategyName: z.string(),
@@ -1250,6 +1251,7 @@ export const positioningCanvasSchema = z.object({
 });
 export const activityStrategyPositioningSaveSchema = z.object({
   revision: z.number().int().min(1),
+  blockId: idSchema.nullable().optional(),
   canvas: positioningCanvasSchema,
 });
 export type PositioningCanvas = z.infer<typeof positioningCanvasSchema>;

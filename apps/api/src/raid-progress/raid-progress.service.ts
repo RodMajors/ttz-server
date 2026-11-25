@@ -728,7 +728,7 @@ export class RaidProgressService {
   async saveSnapshotPositioning(
     activityId: bigint,
     snapshotId: bigint,
-    input: { revision: number; canvas: PositioningCanvas },
+    input: { revision: number; blockId?: string | null; canvas: PositioningCanvas },
     editor: { id: bigint; privilege: number },
   ) {
     const activity = await this.prisma.activity.findFirst({ where: { id: activityId, isDeleted: 0 } });
@@ -770,10 +770,14 @@ export class RaidProgressService {
       if (!snapshotUpdated.count)
         throw new ConflictException({ code: "VERSION_CONFLICT", message: "站位画板已被其他人修改，请刷新后重试" });
       const block = await tx.activityStrategySnapshotBlock.findFirst({
-        where: { snapshotId, type: "POSITIONING" },
+        where: input.blockId
+          ? { id: BigInt(input.blockId), snapshotId, type: "POSITIONING" }
+          : { snapshotId, type: "POSITIONING" },
         orderBy: { orderIndex: "asc" },
         select: { id: true },
       });
+      if (input.blockId && !block)
+        throw new NotFoundException({ code: "POSITIONING_BLOCK_NOT_FOUND", message: "站位预设内容不存在" });
       const config = input.canvas as unknown as Prisma.InputJsonValue;
       if (block) {
         await tx.activityStrategySnapshotBlock.update({ where: { id: block.id }, data: { config, schemaVersion: 1 } });
