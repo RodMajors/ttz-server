@@ -1,0 +1,18 @@
+apps/api/src/activities/activities.service.ts
+  h_1dc22111645538 11,221
+apps/api/src/raid-progress/raid-progress.service.ts
+  h_1dc22111645538 731,773-775,779-780
+packages/contracts/src/index.ts
+  h_1dc22111645538 409,1254
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d565f7f1be59b32d2895bc33bf00dc9c853699f8",
+  "prompts": {},
+  "humans": {
+    "h_1dc22111645538": {
+      "author": "rodmajors <liangzerui@eccom.com.cn>"
+    }
+  }
+}
