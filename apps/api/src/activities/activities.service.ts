@@ -49,7 +49,7 @@ export class ActivitiesService {
         where,
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
-        orderBy: { beginAt: "desc" },
+        orderBy: [{ beginAt: "desc" }, { id: "desc" }],
         include: {
           typeDefinition: true,
           activity_raid_ext: { include: { raids: { select: { name: true, icon: true } } } },

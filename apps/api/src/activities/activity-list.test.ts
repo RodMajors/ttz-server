@@ -29,6 +29,7 @@ describe("activity list filters", () => {
       expect.objectContaining({
         skip: 10,
         take: 10,
+        orderBy: [{ beginAt: "desc" }, { id: "desc" }],
         where: expect.objectContaining({
           status: 1,
           name: { contains: "开荒" },
