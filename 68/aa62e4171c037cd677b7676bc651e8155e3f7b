@@ -1,0 +1,26 @@
+apps/api/src/activities/activities.service.ts
+  h_1dc22111645538 23,55,79,87-94,102,109,192-199,229-230,293-299,325,327,348-350,451,457-459,466-468,506-508,746,748,751-753,756,762,769-841,847,872,960,1137,1188,1237
+apps/api/src/activities/activity-lifecycle.test.ts
+  h_1dc22111645538 1-31
+apps/api/src/activities/activity-lifecycle.ts
+  h_1dc22111645538 1-20
+apps/api/src/activities/activity-rules.test.ts
+  h_1dc22111645538 66-82
+apps/api/src/activities/signup-decision-race.test.ts
+  h_1dc22111645538 12,38-87
+apps/api/src/raid-progress/raid-progress.service.ts
+  h_1dc22111645538 738,803,909
+packages/contracts/src/index.ts
+  h_1dc22111645538 70-79,105,147,155,163,170,223-225,321,368,411-414,426-427,479,887-889
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "68aa62e4171c037cd677b7676bc651e8155e3f7b",
+  "prompts": {},
+  "humans": {
+    "h_1dc22111645538": {
+      "author": "rodmajors <liangzerui@eccom.com.cn>"
+    }
+  }
+}
