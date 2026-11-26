@@ -735,7 +735,7 @@ export class RaidProgressService {
     if (!activity) throw new NotFoundException({ code: "ACTIVITY_NOT_FOUND", message: "活动不存在" });
     if (activity.creator !== editor.id && editor.privilege < 1)
       throw new ForbiddenException({ code: "ACTIVITY_NOT_OWNED", message: "只能编辑自己负责活动的战术快照" });
-    if (activity.status >= 2 || activity.rosterLockedAt)
+    if (activity.status >= 2 || activity.endAt <= new Date() || activity.rosterLockedAt)
       throw new ConflictException({ code: "ACTIVITY_ROSTER_LOCKED", message: "活动名单或站位快照已锁定" });
     const [snapshot, teamLayout] = await Promise.all([
       this.prisma.activityStrategySnapshot.findFirst({
@@ -800,7 +800,7 @@ export class RaidProgressService {
     if (!activity) throw new NotFoundException({ code: "ACTIVITY_NOT_FOUND", message: "活动不存在" });
     if (activity.creator !== editor.id && editor.privilege < 1)
       throw new ForbiddenException({ code: "ACTIVITY_NOT_OWNED", message: "只能管理自己负责活动的战术" });
-    if (activity.status >= 2 || activity.rosterLockedAt)
+    if (activity.status >= 2 || activity.endAt <= new Date() || activity.rosterLockedAt)
       throw new ConflictException({ code: "ACTIVITY_ROSTER_LOCKED", message: "名单已锁定或活动已结束" });
     return this.prisma.$transaction(async (tx) => {
       const activityChanged = await tx.activity.updateMany({
@@ -906,7 +906,7 @@ export class RaidProgressService {
     if (!activity) throw new NotFoundException({ code: "ACTIVITY_NOT_FOUND", message: "活动不存在" });
     if (activity.creator !== editor.id && editor.privilege < 1)
       throw new ForbiddenException({ code: "ACTIVITY_NOT_OWNED", message: "只能管理自己负责活动的战术快照" });
-    if (activity.status >= 2 || activity.rosterLockedAt)
+    if (activity.status >= 2 || activity.endAt <= new Date() || activity.rosterLockedAt)
       throw new ConflictException({ code: "ACTIVITY_ROSTER_LOCKED", message: "活动名单已锁定或活动已结束" });
 
     const snapshot = await this.prisma.activityStrategySnapshot.findFirst({

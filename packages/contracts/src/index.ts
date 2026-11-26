@@ -67,6 +67,16 @@ export const effectiveAttendanceStatuses = ["PRESENT", "LATE"] as const satisfie
 
 export const activityStatusSchema = z.enum(["DRAFT", "PUBLISHED", "FINISHED", "CANCELLED"]);
 export type ActivityStatus = z.infer<typeof activityStatusSchema>;
+export const activityLifecycleStatusSchema = z.enum([
+  "DRAFT",
+  "SIGNUP_OPEN",
+  "PREPARATION",
+  "GATHERING",
+  "IN_PROGRESS",
+  "COMPLETED",
+  "CANCELLED",
+]);
+export type ActivityLifecycleStatus = z.infer<typeof activityLifecycleStatusSchema>;
 const dateOnlySchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -92,6 +102,7 @@ export type ActivityListQuery = z.infer<typeof activityListQuerySchema>;
 
 export const roleSchema = z.enum(["TANK", "HEALER", "MELEE", "RANGED"]);
 export type Role = z.infer<typeof roleSchema>;
+export type GameRole = Role;
 
 export const notificationPreferenceSchema = z.object({
   activityPublished: z.boolean(),
@@ -133,6 +144,7 @@ export const publicMemberSummarySchema = z.object({
   mainCharacter: publicMemberMainCharacterSchema.nullable(),
 });
 export type PublicMemberSummary = z.infer<typeof publicMemberSummarySchema>;
+export type UserSummary = PublicMemberSummary;
 
 export const activitySummarySchema = z.object({
   id: idSchema,
@@ -140,6 +152,7 @@ export const activitySummarySchema = z.object({
   type: activityTypeCodeSchema,
   typeName: z.string(),
   status: activityStatusSchema,
+  lifecycleStatus: activityLifecycleStatusSchema,
   beginAt: isoDateTimeSchema,
   teamUpAt: isoDateTimeSchema,
   maxPlayers: z.number().int().positive().nullable(),
@@ -147,12 +160,14 @@ export const activitySummarySchema = z.object({
   signupCount: z.number().int().nonnegative(),
   confirmedCount: z.number().int().nonnegative(),
   raidName: z.string().nullable(),
+  raidIcon: z.string().url().nullable(),
   creator: publicMemberSummarySchema,
   canManage: z.boolean(),
   mySignupStatus: signupStatusSchema.nullable(),
   isSignupOpen: z.boolean(),
 });
 export type ActivitySummary = z.infer<typeof activitySummarySchema>;
+export type ActivityListItem = ActivitySummary;
 
 export const activityListSchema = z.object({
   items: z.array(activitySummarySchema),
@@ -205,6 +220,9 @@ export const characterSummarySchema = z.object({
   ),
 });
 export type CharacterSummary = z.infer<typeof characterSummarySchema>;
+export type CharacterClassSummary = Pick<CharacterSummary, "classId" | "className" | "classColor" | "classIconUrl">;
+export type CharacterRaceSummary = Pick<CharacterSummary, "raceId" | "raceName" | "faction" | "gender">;
+export type CharacterSpecialization = CharacterSummary["availableSpecs"][number];
 export const characterListSchema = z.array(characterSummarySchema);
 export const publicCharacterSchema = characterSummarySchema.omit({
   verificationEvidence: true,
@@ -300,6 +318,7 @@ export const activityDetailSchema = z.object({
   type: activityTypeCodeSchema,
   typeName: z.string(),
   status: activityStatusSchema,
+  lifecycleStatus: activityLifecycleStatusSchema,
   description: z.string().nullable(),
   passphrase: z.string().nullable(),
   beginAt: isoDateTimeSchema,
@@ -346,6 +365,7 @@ const activityFieldsSchema = z.object({
     .object({
       raidId: idSchema.optional(),
       progressPlanId: idSchema.nullable().optional(),
+      difficulty: z.enum(["HEROIC", "MYTHIC", "UNSPECIFIED"]).optional(),
       targets: z
         .array(
           z.object({
@@ -388,6 +408,10 @@ export const createActivitySchema = activityFieldsSchema.superRefine((value, con
   if (value.teamUpAt && new Date(value.teamUpAt) > beginAt) {
     context.addIssue({ code: "custom", path: ["teamUpAt"], message: "集合时间不能晚于活动开始时间" });
   }
+  const effectiveTeamUpAt = value.teamUpAt ? new Date(value.teamUpAt) : new Date(beginAt.getTime() - 20 * 60_000);
+  if (new Date(value.signupDeadline) > effectiveTeamUpAt) {
+    context.addIssue({ code: "custom", path: ["signupDeadline"], message: "报名截止时间不能晚于集合时间" });
+  }
 });
 export const createRaidActivitySchema = createActivitySchema;
 export type CreateActivityInput = z.infer<typeof createRaidActivitySchema>;
@@ -399,6 +423,8 @@ export const raidActivityDetailSchema = z.object({
   raidId: idSchema,
   progressPlanId: idSchema.nullable(),
   raidName: z.string(),
+  raidIcon: z.string().url().nullable(),
+  raidBackground: z.string().url().nullable(),
   difficulty: z.enum(["HEROIC", "MYTHIC", "UNSPECIFIED"]),
   mode: z.enum(["PROGRESSION", "FARM"]),
   targets: z.array(
@@ -450,6 +476,7 @@ export const raidActivityDetailSchema = z.object({
     }),
   ),
 });
+export type ActivityRaid = z.infer<typeof raidActivityDetailSchema>;
 
 export const createCharacterSchema = z.object({
   name: z.string().trim().min(2).max(64),
@@ -857,6 +884,9 @@ export const raidCatalogSchema = z.array(
     ),
   }),
 );
+export type RaidCatalog = z.infer<typeof raidCatalogSchema>;
+export type RaidSummary = RaidCatalog[number];
+export type BossSummary = RaidSummary["bosses"][number];
 export const raidPlanCreateSchema = z.object({
   raidId: idSchema,
   difficulty: raidDifficultySchema,

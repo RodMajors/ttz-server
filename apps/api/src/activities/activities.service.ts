@@ -20,6 +20,7 @@ import {
   signupCodeToStatus,
   signupStatusToCode,
 } from "./activity.constants";
+import { getActivityLifecycleStatus } from "./activity-lifecycle";
 import { canMemberChangeSignup } from "./signup-policy";
 
 @Injectable()
@@ -51,7 +52,7 @@ export class ActivitiesService {
         orderBy: { beginAt: "desc" },
         include: {
           typeDefinition: true,
-          activity_raid_ext: { include: { raids: { select: { name: true } } } },
+          activity_raid_ext: { include: { raids: { select: { name: true, icon: true } } } },
           creatorUser: {
             select: {
               id: true,
@@ -75,6 +76,7 @@ export class ActivitiesService {
       }),
       this.prisma.activity.count({ where }),
     ]);
+    const now = new Date();
     return {
       items: activities.map((activity) => ({
         id: activity.id.toString(),
@@ -82,6 +84,14 @@ export class ActivitiesService {
         type: activity.typeDefinition.code,
         typeName: activity.typeDefinition.name,
         status: (["DRAFT", "PUBLISHED", "FINISHED", "CANCELLED"] as const)[activity.status] ?? "DRAFT",
+        lifecycleStatus: getActivityLifecycleStatus({
+          status: activity.status,
+          signupDeadline: activity.signupDeadline,
+          teamUpAt: activity.teamUpAt,
+          beginAt: activity.beginAt,
+          endAt: activity.endAt,
+          now,
+        }),
         beginAt: activity.beginAt.toISOString(),
         teamUpAt: (activity.teamUpAt ?? new Date(activity.beginAt.getTime() - 20 * 60_000)).toISOString(),
         maxPlayers: activity.maxPlayers,
@@ -89,13 +99,14 @@ export class ActivitiesService {
         signupCount: activity._count.signups,
         confirmedCount: activity.signups.filter((signup) => signup.status === signupStatusToCode.CONFIRMED).length,
         raidName: activity.activity_raid_ext?.raids.name ?? null,
+        raidIcon: assetUrl(activity.activity_raid_ext?.raids.icon),
         creator: serializePublicMember(activity.creatorUser),
         canManage: activity.creator === user.id || user.privilege >= 1,
         mySignupStatus:
           signupCodeToStatus[activity.signups.find((signup) => signup.userId === user.id)?.status ?? -1] ?? null,
         isSignupOpen:
           activity.status === 1 &&
-          Boolean(activity.signupDeadline && activity.signupDeadline > new Date()) &&
+          Boolean(activity.signupDeadline && activity.signupDeadline > now) &&
           !activity.rosterLockedAt,
       })),
       pagination: { page: query.page, pageSize: query.pageSize, total },
@@ -178,6 +189,14 @@ export class ActivitiesService {
       type: activity.typeDefinition.code,
       typeName: activity.typeDefinition.name,
       status: activityCodeToStatus[activity.status] ?? "DRAFT",
+      lifecycleStatus: getActivityLifecycleStatus({
+        status: activity.status,
+        signupDeadline: activity.signupDeadline,
+        teamUpAt: activity.teamUpAt,
+        beginAt: activity.beginAt,
+        endAt: activity.endAt,
+        now,
+      }),
       description: activity.description,
       passphrase: activity.passphrase,
       inviter: activity.characters ? serializeCharacter(activity.characters) : null,
@@ -207,6 +226,8 @@ export class ActivitiesService {
             raidId: activity.activity_raid_ext.raid_id.toString(),
             progressPlanId: activity.activity_raid_ext.progress_plan_id?.toString() ?? null,
             raidName: activity.activity_raid_ext.raids.name,
+            raidIcon: assetUrl(activity.activity_raid_ext.raids.icon),
+            raidBackground: assetUrl(activity.activity_raid_ext.raids.background),
             difficulty:
               activity.activity_raid_ext.difficulty === 3
                 ? "MYTHIC"
@@ -269,6 +290,13 @@ export class ActivitiesService {
     const type = await this.prisma.activityType.findUnique({ where: { code: input.type } });
     if (!type) throw new ConflictException({ code: "ACTIVITY_TYPE_NOT_READY", message: "活动类型基础数据尚未配置" });
     const beginAt = new Date(input.beginAt);
+    const signupDeadline = new Date(input.signupDeadline);
+    const teamUpAt = input.teamUpAt ? new Date(input.teamUpAt) : new Date(beginAt.getTime() - 20 * 60_000);
+    if (signupDeadline > teamUpAt)
+      throw new ConflictException({
+        code: "INVALID_ACTIVITY_SCHEDULE",
+        message: "时间顺序必须为报名截止、集合、开始、结束",
+      });
     const raid = input.raid;
     const inviterId = await this.resolveInviterId(input.inviterId);
     const raidPlan = raid?.progressPlanId
@@ -294,9 +322,9 @@ export class ActivitiesService {
           passphrase: input.passphrase ?? "123",
           inviter: inviterId,
           beginAt,
-          teamUpAt: input.teamUpAt ? new Date(input.teamUpAt) : new Date(beginAt.getTime() - 20 * 60_000),
+          teamUpAt,
           endAt: new Date(beginAt.getTime() + input.durationMinutes * 60_000),
-          signupDeadline: new Date(input.signupDeadline),
+          signupDeadline,
           durationMinutes: input.durationMinutes,
           maxPlayers: input.maxPlayers ?? null,
           tankSlots: input.tankSlots ?? null,
@@ -317,7 +345,9 @@ export class ActivitiesService {
                   create: {
                     raid_id: raidId,
                     progress_plan_id: raidPlan?.id ?? null,
-                    difficulty: raidPlan?.difficulty ?? 0,
+                    difficulty:
+                      raidPlan?.difficulty ??
+                      (raid?.difficulty === "MYTHIC" ? 3 : raid?.difficulty === "HEROIC" ? 2 : 0),
                     mode: input.type === "raid_progress" ? 1 : 2,
                   },
                 },
@@ -418,18 +448,23 @@ export class ActivitiesService {
 
   async update(id: bigint, input: UpdateActivityInput, user: AuthUser) {
     const activity = await this.requireManageable(id, user);
-    if (activity.status >= 2) {
+    if (activity.status >= 2 || activity.endAt <= new Date()) {
       throw new ConflictException({ code: "ACTIVITY_READ_ONLY", message: "已结束或已取消的活动不能编辑" });
     }
     const beginAt = input.beginAt ? new Date(input.beginAt) : activity.beginAt;
     const durationMinutes = input.durationMinutes ?? activity.durationMinutes;
     const signupDeadline = input.signupDeadline ? new Date(input.signupDeadline) : activity.signupDeadline;
-    const teamUpAt = input.teamUpAt ? new Date(input.teamUpAt) : activity.teamUpAt;
+    const teamUpAt = input.teamUpAt
+      ? new Date(input.teamUpAt)
+      : (activity.teamUpAt ?? new Date(beginAt.getTime() - 20 * 60_000));
     if (!signupDeadline || signupDeadline >= beginAt) {
       throw new ConflictException({ code: "INVALID_SIGNUP_DEADLINE", message: "报名截止时间必须早于活动开始时间" });
     }
     if (teamUpAt && teamUpAt > beginAt) {
       throw new ConflictException({ code: "INVALID_TEAM_UP_TIME", message: "集合时间不能晚于活动开始时间" });
+    }
+    if (signupDeadline && signupDeadline > teamUpAt) {
+      throw new ConflictException({ code: "INVALID_ACTIVITY_SCHEDULE", message: "报名截止时间不能晚于集合时间" });
     }
     const inviterId = input.inviterId === undefined ? undefined : await this.resolveInviterId(input.inviterId);
     const type = input.type ? await this.prisma.activityType.findUnique({ where: { code: input.type } }) : undefined;
@@ -468,6 +503,9 @@ export class ActivitiesService {
     if (!allowed.includes(activity.status))
       throw new ConflictException({ code: "INVALID_ACTIVITY_STATE", message: "当前活动状态不允许执行此操作" });
     const now = new Date();
+    if (target !== "finish" && activity.endAt <= now) {
+      throw new ConflictException({ code: "ACTIVITY_READ_ONLY", message: "活动已结束，不能发布或取消" });
+    }
     if (target === "publish" && (!activity.signupDeadline || activity.signupDeadline >= activity.beginAt)) {
       throw new ConflictException({
         code: "INVALID_SIGNUP_DEADLINE",
@@ -705,32 +743,108 @@ export class ActivitiesService {
       const activity = await transaction.activity.update({
         where: { id },
         data: { version: { increment: 1 } },
-        select: { status: true },
+        select: { status: true, rosterLockedAt: true, endAt: true },
       });
-      if (activity.status >= 2) {
+      if (activity.status >= 2 || activity.endAt <= new Date()) {
         throw new ConflictException({ code: "ACTIVITY_READ_ONLY", message: "已结束或已取消的活动不能处理报名" });
+      }
+      if (activity.rosterLockedAt) {
+        throw new ConflictException({ code: "ACTIVITY_ROSTER_LOCKED", message: "名单已锁定，不能处理报名" });
       }
       const signup = await transaction.activitySignup.findFirst({ where: { id: signupId, activityId: id } });
       if (!signup) throw new NotFoundException({ code: "SIGNUP_NOT_FOUND", message: "报名记录不存在" });
-      return transaction.activitySignup.update({
+      const updated = await transaction.activitySignup.update({
         where: { id: signupId },
         data: {
           status: signupStatusToCode[input.status],
           officerNote: input.officerNote,
           decisionReason: input.reason,
-          groupNo: input.groupNo,
+          groupNo: input.status === "CONFIRMED" ? (input.groupNo ?? null) : null,
           orderIndex: input.orderIndex,
           handledBy: user.id,
           handledAt: new Date(),
           confirmedAt: input.status === "CONFIRMED" ? new Date() : null,
         },
       });
+      if (signup.status === signupStatusToCode.CONFIRMED && input.status !== "CONFIRMED") {
+        const layout = await transaction.activityTeamLayout.findUnique({
+          where: { activityId: id },
+          select: { id: true },
+        });
+        if (layout) {
+          const cleared = await transaction.activityTeamSeat.updateMany({
+            where: { layoutId: layout.id, signupId },
+            data: {
+              signupId: null,
+              assignedBy: null,
+              assignedAt: null,
+              userIdSnapshot: null,
+              userNameSnapshot: null,
+              characterIdSnapshot: null,
+              characterName: null,
+              realmName: null,
+              classIdSnapshot: null,
+              className: null,
+              specIdSnapshot: null,
+              specNameSnapshot: null,
+            },
+          });
+          if (cleared.count) {
+            await transaction.activityTeamLayout.update({
+              where: { id: layout.id },
+              data: { revision: { increment: 1 } },
+            });
+          }
+        }
+        const snapshots = await transaction.activityStrategySnapshot.findMany({
+          where: { target: { activityId: id }, status: "EDITING" },
+          select: { id: true },
+        });
+        for (const snapshot of snapshots) {
+          const slotResult = await transaction.activityStrategySnapshotSlot.updateMany({
+            where: { snapshotId: snapshot.id, signupId },
+            data: {
+              signupId: null,
+              userIdSnapshot: null,
+              userNameSnapshot: null,
+              characterIdSnapshot: null,
+              characterName: null,
+              realmName: null,
+              className: null,
+              specIdSnapshot: null,
+              specName: null,
+              classIdSnapshot: null,
+              assignedBy: null,
+              assignedAt: null,
+            },
+          });
+          const executorResult = await transaction.activityStrategySnapshotTask.updateMany({
+            where: { snapshotId: snapshot.id, executorSignupId: signupId },
+            data: { executorSignupId: null },
+          });
+          const fallbackResult = await transaction.activityStrategySnapshotTask.updateMany({
+            where: { snapshotId: snapshot.id, fallbackSignupId: signupId },
+            data: { fallbackSignupId: null },
+          });
+          const targetResult = await transaction.activityStrategySnapshotTask.updateMany({
+            where: { snapshotId: snapshot.id, targetSignupId: signupId },
+            data: { targetSignupId: null },
+          });
+          if (slotResult.count || executorResult.count || fallbackResult.count || targetResult.count) {
+            await transaction.activityStrategySnapshot.update({
+              where: { id: snapshot.id },
+              data: { revision: { increment: 1 } },
+            });
+          }
+        }
+      }
+      return updated;
     });
   }
 
   async confirmPendingSignups(id: bigint, user: AuthUser) {
     const activity = await this.requireManageable(id, user);
-    if (activity.status >= 2 || activity.rosterLockedAt) {
+    if (activity.status >= 2 || activity.endAt <= new Date() || activity.rosterLockedAt) {
       throw new ConflictException({ code: "ACTIVITY_READ_ONLY", message: "名单已锁定或活动已结束，不能批量确认" });
     }
     return this.prisma.$transaction(async (transaction) => {
@@ -755,7 +869,7 @@ export class ActivitiesService {
 
   async saveTeamLayout(activityId: bigint, input: ActivityTeamLayoutSaveInput, editor: AuthUser) {
     const activity = await this.requireManageable(activityId, editor);
-    if (activity.status >= 2 || activity.rosterLockedAt)
+    if (activity.status >= 2 || activity.endAt <= new Date() || activity.rosterLockedAt)
       throw new ConflictException({ code: "ACTIVITY_ROSTER_LOCKED", message: "活动名单已锁定或活动已结束" });
 
     const layout = await this.prisma.activityTeamLayout.findUnique({
@@ -843,7 +957,7 @@ export class ActivitiesService {
 
   async lockRoster(id: bigint, user: AuthUser) {
     const activity = await this.requireManageable(id, user);
-    if (activity.status >= 2)
+    if (activity.status >= 2 || activity.endAt <= new Date())
       throw new ConflictException({ code: "ACTIVITY_READ_ONLY", message: "已结束或已取消的活动不能锁定名单" });
     if (activity.rosterLockedAt) return { rosterLockedAt: activity.rosterLockedAt.toISOString() };
     const lockedAt = new Date();
@@ -1020,7 +1134,7 @@ export class ActivitiesService {
 
   async unlockRoster(id: bigint, user: AuthUser) {
     const activity = await this.requireManageable(id, user);
-    if (activity.status >= 2)
+    if (activity.status >= 2 || activity.endAt <= new Date())
       throw new ConflictException({ code: "ACTIVITY_READ_ONLY", message: "已结束或已取消的活动不能解锁名单" });
     if (!activity.rosterLockedAt) return { rosterLockedAt: null };
     return this.prisma.$transaction(async (transaction) => {
@@ -1071,7 +1185,7 @@ export class ActivitiesService {
 
   async closeSignup(id: bigint, user: AuthUser) {
     const activity = await this.requireManageable(id, user);
-    if (activity.status !== 1) {
+    if (activity.status !== 1 || activity.endAt <= new Date()) {
       throw new ConflictException({ code: "INVALID_ACTIVITY_STATE", message: "只有已发布活动可以关闭报名" });
     }
     return this.prisma.activity.update({
@@ -1120,7 +1234,7 @@ export class ActivitiesService {
     user: AuthUser,
   ) {
     const activity = await this.requireManageable(id, user);
-    if (activity.status >= 2) {
+    if (activity.status >= 2 || activity.endAt <= new Date()) {
       throw new ConflictException({ code: "ACTIVITY_READ_ONLY", message: "已结束或已取消的活动不能调整名单" });
     }
     const signupIds = input.entries.map((entry) => BigInt(entry.signupId));

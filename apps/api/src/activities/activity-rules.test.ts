@@ -63,6 +63,23 @@ describe("activity request rules", () => {
     expect(result.success).toBe(true);
   });
 
+  it("requires signup to close before the team-up time", () => {
+    const result = createActivitySchema.safeParse({
+      name: "团本开荒",
+      type: "raid_progress",
+      beginAt: "2026-12-01T12:00:00.000Z",
+      teamUpAt: "2026-12-01T11:00:00.000Z",
+      signupDeadline: "2026-12-01T11:30:00.000Z",
+      durationMinutes: 180,
+      raid: {
+        raidId: "3",
+        targets: [{ bossId: "2", orderIndex: 0, strategyVersionId: null }],
+      },
+    });
+
+    expect(result.success).toBe(false);
+  });
+
   it("allows an activity to omit roster guidance and does not cap displayed role guidance", () => {
     const result = createActivitySchema.safeParse({
       name: "团本开荒",
